@@ -223,12 +223,12 @@ body {
   color: var(--text);
 }
 
-.thumb {
+.msg-image {
   display: block;
   width: auto;
   max-width: 100%;
-  max-height: 100px;
-  margin: 0 12px 8px 12px;
+  max-height: 140px;
+  margin: 8px 0 0 0;
   border: 1px solid var(--line);
   border-radius: var(--r);
   background-color: #111;

@@ -42,6 +42,8 @@ export type AgentRuntimeContext = {
   selectionLocked: boolean;
   selectionSummary: string;
   hasDraft: boolean;
+  /** True when draft exists — replace must NOT re-run vision. */
+  readyToReplace: boolean;
   draftPreview: string;
   tableStyles: string[];
   selectedStyle: string;

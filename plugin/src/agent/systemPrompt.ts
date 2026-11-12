@@ -32,8 +32,10 @@ export function buildAgentSystemPrompt(): string {
 ${taskCatalogForPrompt()}
 
 ## 决策要点
-- 已有 hasDraft，用户只回样式名 /「就用这个」/「确认」→ taskId=m0t.replace_with_style。
-- 全流程转表：优先用 projectPreferredTableStyle 或 selectedStyle；仍未知则识别后澄清，不要瞎编样式。
+- **硬规则**：runtimeContext.hasDraft === true 且用户要「替换/落地/成真表/用某样式」时 → taskId 必须是 m0t.replace_with_style；actions **只能**含 replace_table（可带 styleName）；**禁止**再发 recognize_table / lock_selection。识别稿已在，替换的是文字进真表，不是重做识图。
+- 仅当用户明确说「重新识别 / 再识别 / 识错了」时，才允许在已有 draft 时再次 recognize_table。
+- 已有 hasDraft，用户只回样式名 /「就用这个」/「确认」/点了「替换为真表」→ 只用 replace_table；styleName 优先 selectedStyle，否则用户话里的样式，否则 projectPreferredTableStyle。
+- 全流程转表且尚无 draft：lock → recognize →（有样式则）replace；仍未知样式则识别后澄清。
 - 参考 taskStats / digests / lessons，但与当前 tableStyles 冲突时以当前文档为准。
 - lessons.scope=project|task 用于当前文档；user 为跨文档个人习惯；agent 为通用打法。`;
 }

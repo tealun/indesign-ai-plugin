@@ -8,7 +8,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.3.1";
+const PLUGIN_UI_VERSION = "0.3.2";
 
 function newId(): string {
   try {
@@ -99,12 +99,6 @@ export function mountPanel(root: HTMLElement): void {
     rows: "2",
     placeholder: "自然说即可，例如：把这个转成真表，用货号信息表…",
   }) as HTMLTextAreaElement;
-  const thumb = el("img", {
-    id: "thumb",
-    className: "thumb hidden",
-    alt: "选区预览",
-  }) as HTMLImageElement;
-
   function addMessage(role: Role, text: string, extra?: HTMLElement): HTMLElement {
     const bubble = el("div", { className: `msg msg-${role}` }, [
       el("div", { className: "msg-role" }, [
@@ -116,6 +110,16 @@ export function mountPanel(root: HTMLElement): void {
     chatLog.append(bubble);
     chatLog.scrollTop = chatLog.scrollHeight;
     return bubble;
+  }
+
+  /** Show capture/补图 inside the chat thread (not a fixed footer preview). */
+  function addImageMessage(caption: string, dataUrl: string): void {
+    const img = el("img", {
+      className: "msg-image",
+      alt: caption,
+    }) as HTMLImageElement;
+    img.src = dataUrl;
+    addMessage("assistant", caption, img);
   }
 
   function setBusy(v: boolean): void {
@@ -244,7 +248,14 @@ export function mountPanel(root: HTMLElement): void {
     chip("转成表格", () => void handleUserText("转成表格")),
     chip("读取选区", () => void handleUserText("读取选区")),
     chip("识别表格", () => void handleUserText("识别表格")),
-    chip("替换为真表", () => void handleUserText("替换为真表")),
+    chip("替换为真表", () => {
+      const style = (styleSelect.value || "").trim();
+      void handleUserText(
+        style
+          ? `把已识别好的表格文字，用表样式「${style}」直接替换到当前锁定选区。不要重新识别，不要从头执行。`
+          : "把已识别好的表格文字直接替换到当前锁定选区（用我选的/项目偏好表样式）。不要重新识别，不要从头执行。",
+      );
+    }),
   ]);
 
   const sendBtn = el("div", { className: "ctl ctl-primary send", role: "button" }, [
@@ -268,7 +279,7 @@ export function mountPanel(root: HTMLElement): void {
     el("div", { className: "composer-actions" }, [sendBtn]),
   ]);
 
-  chatView.append(chatLog, thumb, chips, composerBar);
+  chatView.append(chatLog, chips, composerBar);
 
   root.append(
     el("header", { className: "top" }, [
@@ -318,9 +329,7 @@ export function mountPanel(root: HTMLElement): void {
     const reader = new FileReader();
     reader.onload = () => {
       imageDataUrl = String(reader.result || "");
-      thumb.src = imageDataUrl;
-      thumb.classList.remove("hidden");
-      addMessage("system", "已载入补图。可以说「识别表格」。");
+      addImageMessage("已载入补图（将用于识别）。", imageDataUrl);
     };
     reader.readAsDataURL(file);
   });
@@ -364,12 +373,10 @@ export function mountPanel(root: HTMLElement): void {
         return false;
       }
       imageDataUrl = cap.dataUrl;
-      thumb.src = imageDataUrl;
-      thumb.classList.remove("hidden");
       if (cap.warnings.length) {
         addMessage("system", cap.warnings.join("；"));
       }
-      addMessage("system", "选区图已导出。");
+      addImageMessage("选区图已导出，将据此识别表格。", imageDataUrl);
     }
 
     addMessage(
@@ -494,7 +501,6 @@ export function mountPanel(root: HTMLElement): void {
     clearLockedSelection();
     imageDataUrl = "";
     draft = null;
-    thumb.classList.add("hidden");
     addMessage("assistant", `完成：已用样式「${styleName}」生成真表，原矢量已删除。`);
     const mem = loadMemory();
     recordTaskOutcome(
@@ -537,7 +543,6 @@ export function mountPanel(root: HTMLElement): void {
       draft = null;
       imageDataUrl = "";
       clearLockedSelection();
-      thumb.classList.add("hidden");
     } else if (id) {
       const mem = loadMemory();
       getOrCreateProject(mem, {
@@ -562,11 +567,46 @@ export function mountPanel(root: HTMLElement): void {
       selectionLocked: Boolean(locked),
       selectionSummary: locked ? selectionSummary(locked.snapshot.selection) : "",
       hasDraft: Boolean(draft),
+      readyToReplace: Boolean(draft),
       draftPreview: preview,
       tableStyles: [...tableStyles],
       selectedStyle: (styleSelect.value || "").trim(),
       hasPatchImage: Boolean(imageDataUrl),
     };
+  }
+
+  /**
+   * Host invariant: if we already have a table draft and the user asked to replace
+   * (not re-recognize), drop redundant lock/recognize so we never re-OCR.
+   */
+  function sanitizeActionsForReplace(
+    actions: AgentAction[],
+    userText: string,
+  ): AgentAction[] {
+    const wantsReplace = /(替换|成真表|落地|写入真表)/.test(userText);
+    const wantsRedoVision = /(重新识别|再识别|识错|重做识别)/.test(userText);
+    if (!draft || !wantsReplace || wantsRedoVision) return actions;
+
+    let next = actions.filter(
+      (a) => a.type !== "recognize_table" && a.type !== "lock_selection",
+    );
+    const hasReplace = next.some((a) => a.type === "replace_table");
+    if (!hasReplace) {
+      const style =
+        (styleSelect.value || "").trim() ||
+        loadMemory().projects[activeProjectKey]?.preferredTableStyle ||
+        "";
+      if (style) {
+        next = [...next, { type: "replace_table", styleName: style }];
+      }
+    }
+    if (next.length !== actions.length) {
+      addMessage(
+        "system",
+        "已有识别结果：跳过重新识图，只执行替换。",
+      );
+    }
+    return next;
   }
 
   async function executeAgentActions(actions: AgentAction[]): Promise<void> {
@@ -576,6 +616,10 @@ export function mountPanel(root: HTMLElement): void {
           await doLock();
           break;
         case "recognize_table":
+          if (draft) {
+            addMessage("system", "识别稿已在，跳过重复识图。");
+            break;
+          }
           await doRecognize(undefined, { quiet: true });
           break;
         case "replace_table":
@@ -700,12 +744,15 @@ export function mountPanel(root: HTMLElement): void {
         addMessage("system", `已沉淀 ${decision.lessons.length} 条经验。`);
       }
 
-      if (decision.actions.length) {
+      const actions = sanitizeActionsForReplace(decision.actions, text);
+      if (actions.length) {
         addMessage(
           "system",
-          `执行：${decision.actions.map((a) => a.type).join(" → ")}`,
+          `执行：${actions.map((a) => a.type).join(" → ")}`,
         );
-        await executeAgentActions(decision.actions);
+        await executeAgentActions(actions);
+      } else if (draft && /(替换|成真表)/.test(text) && !(styleSelect.value || "").trim()) {
+        addMessage("assistant", "识别稿已在。请先在下方选择表样式，再点「替换为真表」。");
       }
     } catch (e) {
       addMessage("assistant", `出错了：${String(e)}`);
