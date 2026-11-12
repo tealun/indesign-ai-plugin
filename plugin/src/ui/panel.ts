@@ -1,6 +1,12 @@
 import { listProviders } from "../providers/registry.js";
-import { loadSettings, maskApiKey, saveSettings } from "../settings/store.js";
+import {
+  loadSettings,
+  maskApiKey,
+  resolveReadySettings,
+  saveSettings,
+} from "../settings/store.js";
 import type {
+  AiConnectionMode,
   OpenAiWireApi,
   ProviderSettings,
   ProviderType,
@@ -66,7 +72,12 @@ function readConfigForm(root: HTMLElement): ProviderSettings {
   const q = (id: string) =>
     (root.querySelector(`#${id}`) as HTMLInputElement | HTMLSelectElement | null)
       ?.value ?? "";
+  const modeRaw = q("connectionMode");
   return {
+    connectionMode:
+      modeRaw === "plugin_default"
+        ? ("plugin_default" as AiConnectionMode)
+        : ("byok" as AiConnectionMode),
     provider: (q("provider") as ProviderType) || current.provider,
     baseUrl: q("baseUrl"),
     apiKey: q("apiKey") || current.apiKey,
@@ -197,9 +208,31 @@ export function mountPanel(root: HTMLElement): void {
       [p.label],
     ),
   );
+  const connectionMode = settings.connectionMode || "byok";
   configView.append(
     el("p", { className: "lede" }, [
-      "模型与中转只在这里改。若你的 Codex/中转配置是 wire_api=responses，下方 Wire API 必须选 Responses，否则会打到 /chat/completions 并 404。",
+      "当前阶段：用「自配模型」——和你平时自己配中转一样（Base URL / API Key / Model）。「插件默认模型」尚未开放。",
+    ]),
+    el("label", {}, [
+      "连接方式",
+      el("select", { id: "connectionMode" }, [
+        el(
+          "option",
+          {
+            value: "byok",
+            ...(connectionMode === "byok" ? { selected: "selected" } : {}),
+          },
+          ["自配模型（当前可用）"],
+        ),
+        el(
+          "option",
+          {
+            value: "plugin_default",
+            ...(connectionMode === "plugin_default" ? { selected: "selected" } : {}),
+          },
+          ["插件默认模型（尚未开放）"],
+        ),
+      ]),
     ]),
     el("label", {}, ["Provider", el("select", { id: "provider" }, providerOptions)]),
     el("label", {}, [
@@ -270,8 +303,11 @@ export function mountPanel(root: HTMLElement): void {
         }),
       ]),
     ]),
+    el("p", { className: "lede" }, [
+      "若 Codex/中转是 wire_api=responses，Wire API 必须选 Responses，否则会打到 /chat/completions 并 404。",
+    ]),
     el("div", { id: "saveConfig", className: "ctl ctl-primary", role: "button" }, [
-      "保存配置",
+      "保存自配",
     ]),
   );
 
@@ -349,9 +385,11 @@ export function mountPanel(root: HTMLElement): void {
       next.apiKey = loadSettings().apiKey;
     }
     saveSettings(next);
+    const modeLabel =
+      next.connectionMode === "plugin_default" ? "插件默认（未开放）" : "自配模型";
     addMessage(
       "system",
-      `配置已保存：${next.provider} · wire=${next.wireApi || "chat_completions"} · model=${next.model || "（空）"} · key=${maskApiKey(next.apiKey)}`,
+      `配置已保存：${modeLabel} · ${next.provider} · wire=${next.wireApi || "chat_completions"} · model=${next.model || "（空）"} · key=${maskApiKey(next.apiKey)}`,
     );
     switchTab("chat");
   });
@@ -396,12 +434,13 @@ export function mountPanel(root: HTMLElement): void {
       addMessage("assistant", "还没有锁定选区。先说「读取选区」或「转成表格」。");
       return false;
     }
-    const s = loadSettings();
-    if (!s.baseUrl || !s.apiKey || !s.model) {
-      addMessage("assistant", "模型还没配好。请到「配置」填 Base URL / API Key / 识图 Model。");
+    const ready = resolveReadySettings();
+    if (!ready.ok) {
+      addMessage("assistant", ready.reason);
       switchTab("config");
       return false;
     }
+    const s = ready.settings;
 
     if (!imageDataUrl) {
       addMessage("assistant", "① 正在导出选区图…");
@@ -706,12 +745,13 @@ export function mountPanel(root: HTMLElement): void {
       return;
     }
 
-    const s = loadSettings();
-    if (!s.baseUrl || !s.apiKey || !s.model) {
-      addMessage("assistant", "模型还没配好。请到「配置」填好中转与 Model（Wire API 按你的 Codex 选 Responses）。");
+    const ready = resolveReadySettings();
+    if (!ready.ok) {
+      addMessage("assistant", ready.reason);
       switchTab("config");
       return;
     }
+    const s = ready.settings;
 
     setBusy(true);
     try {

@@ -158,7 +158,16 @@ export type ProviderType =
 /** OpenAI-compatible relays: classic chat completions vs Responses API (Codex wire_api). */
 export type OpenAiWireApi = "chat_completions" | "responses";
 
+/**
+ * How the panel reaches a model.
+ * - `byok`: user-supplied Base URL / API Key / Model (current shipping path)
+ * - `plugin_default`: reserved for a vendor-hosted default model (not enabled yet)
+ */
+export type AiConnectionMode = "byok" | "plugin_default";
+
 export type ProviderSettings = {
+  /** Active connection path. Default / only-supported: byok. */
+  connectionMode: AiConnectionMode;
   provider: ProviderType;
   baseUrl: string;
   apiKey: string;
