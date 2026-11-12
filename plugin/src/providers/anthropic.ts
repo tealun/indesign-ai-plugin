@@ -23,13 +23,22 @@ async function chatAnthropic(
       });
     }
   }
+  let textPayload = JSON.stringify({
+    op: request.op,
+    snapshot: request.snapshot,
+    userNote: request.userNote,
+  });
+  if (request.op === "agent_turn" && request.userNote) {
+    try {
+      const p = JSON.parse(request.userNote) as { system?: string; user?: string };
+      if (p.system && p.user) textPayload = `${p.system}\n\n${p.user}`;
+    } catch {
+      textPayload = request.userNote;
+    }
+  }
   content.push({
     type: "text",
-    text: JSON.stringify({
-      op: request.op,
-      snapshot: request.snapshot,
-      userNote: request.userNote,
-    }),
+    text: textPayload,
   });
 
   const controller = new AbortController();

@@ -8,7 +8,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.2.10";
+const PLUGIN_UI_VERSION = "0.3.0";
 
 function newId(): string {
   try {
@@ -38,10 +38,11 @@ import {
 } from "../host/indesignHost.js";
 import { isInDesignRuntime } from "../host/uxpRequire.js";
 import { directRecoverTable } from "../transport/direct.js";
+import { directAgentTurn } from "../transport/directAgent.js";
 import { preflightTableReplace } from "../m0t/preflight.js";
 import { validateTableDraft } from "../protocol/tableDraft.js";
+import type { AgentAction, AgentChatMessage, AgentRuntimeContext } from "../agent/types.js";
 import { el } from "./dom.js";
-import { parseChatIntent } from "./chatIntent.js";
 import { matchTableStyleName } from "./matchStyle.js";
 
 type Role = "assistant" | "user" | "system";
@@ -75,22 +76,15 @@ export function mountPanel(root: HTMLElement): void {
   let draft: TableDraft | null = null;
   let tableStyles: string[] = [];
   let busy = false;
-  /**
-   * UXP has no window.confirm.
-   * - replace: confirm destructive write
-   * - pickStyle: waiting for a style name after recognize/auto
-   */
-  let pending:
-    | null
-    | { type: "replace"; styleName: string }
-    | { type: "pickStyle" } = null;
+  /** Recent turns sent to the model so it can continue context (not regex state machines). */
+  let history: AgentChatMessage[] = [];
 
   const chatLog = el("div", { className: "chat-log", id: "chatLog" });
   const composer = el("textarea", {
     id: "composer",
     className: "composer",
     rows: "2",
-    placeholder: "选中后直接说：转成表格 / 用「样式名」转成表格…",
+    placeholder: "自然说即可，例如：把这个转成真表，用货号信息表…",
   }) as HTMLTextAreaElement;
   const thumb = el("img", {
     id: "thumb",
@@ -453,40 +447,6 @@ export function mountPanel(root: HTMLElement): void {
     await runReplace(name);
   }
 
-  async function requestReplace(styleName?: string): Promise<void> {
-    const locked = getLockedSelection();
-    if (!locked) {
-      addMessage("assistant", "没有锁定选区，无法替换。");
-      return;
-    }
-    if (!draft) {
-      addMessage("assistant", "还没有识别结果。先说「识别表格」。");
-      return;
-    }
-    const name = (styleName || styleSelect.value || "").trim();
-    if (!name) {
-      addMessage("assistant", "请先选择或指定一个文档里已有的表样式。");
-      await refreshStylesSilent();
-      return;
-    }
-    const host = getHost();
-    const pre = await preflightTableReplace({
-      draft,
-      tableStyleName: name,
-      locked,
-      host,
-    });
-    if (!pre.ok) {
-      addMessage("assistant", `预检未通过（未改文档）：${pre.error.message}`);
-      return;
-    }
-    pending = { type: "replace", styleName: name };
-    addMessage(
-      "assistant",
-      `将创建真表并删除原矢量，样式「${name}」（可 Undo）。\n回复「确认」继续，或「取消」。`,
-    );
-  }
-
   async function runReplace(styleName: string): Promise<void> {
     const locked = getLockedSelection();
     if (!locked || !draft) {
@@ -525,59 +485,53 @@ export function mountPanel(root: HTMLElement): void {
     addMessage("assistant", `完成：已用样式「${styleName}」生成真表，原矢量已删除。`);
   }
 
-  /** One-shot: lock → recognize → replace (no extra confirm). */
-  async function doAutoTable(styleName?: string, note?: string): Promise<void> {
-    const s = loadSettings();
-    if (!s.baseUrl || !s.apiKey || !s.model) {
-      addMessage("assistant", "模型还没配好。请到「配置」填 Base URL / API Key / 识图 Model。");
-      switchTab("config");
-      return;
-    }
-
-    if (!getLockedSelection()) {
-      addMessage("assistant", "开始全流程：先读取当前选区…");
-      await doLock();
-      if (!getLockedSelection()) return;
-    } else {
-      addMessage("assistant", "开始全流程：已有锁定选区，进入识别…");
-    }
-
-    await refreshStylesSilent();
-    imageDataUrl = ""; // force fresh capture for auto run
-    const ok = await doRecognize(note, { quiet: true });
-    if (!ok || !draft) return;
-
-    const name = resolveStyleName(styleName);
-    if (!name) {
-      pending = { type: "pickStyle" };
-      addMessage(
-        "assistant",
-        tableStyles.length
-          ? `识别已完成，但还不知道用哪个表样式。\n直接回复样式名即可（例如：货号信息表），或在下方下拉框选择后再说「确认」。\n可用：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`
-          : "识别已完成，但文档里没有可用表样式。请先在 InDesign 建好表样式。",
-      );
-      return;
-    }
-
-    styleSelect.value = name;
-    const host = getHost();
+  function buildAgentContext(): AgentRuntimeContext {
     const locked = getLockedSelection();
-    if (!locked) {
-      addMessage("assistant", "选区在识别后失效，请重新选中后再说「转成表格」。");
-      return;
+    const preview = draft
+      ? draft.rows
+          .slice(0, 6)
+          .map((r) => r.join(" | "))
+          .join("\n")
+      : "";
+    return {
+      selectionLocked: Boolean(locked),
+      selectionSummary: locked ? selectionSummary(locked.snapshot.selection) : "",
+      hasDraft: Boolean(draft),
+      draftPreview: preview,
+      tableStyles: [...tableStyles],
+      selectedStyle: (styleSelect.value || "").trim(),
+      hasPatchImage: Boolean(imageDataUrl),
+    };
+  }
+
+  async function executeAgentActions(actions: AgentAction[]): Promise<void> {
+    for (const action of actions) {
+      switch (action.type) {
+        case "lock_selection":
+          await doLock();
+          break;
+        case "recognize_table":
+          await doRecognize(undefined, { quiet: true });
+          break;
+        case "replace_table":
+          await continueWithStyle(action.styleName);
+          break;
+        case "list_styles":
+          await refreshStylesSilent();
+          addMessage(
+            "assistant",
+            tableStyles.length
+              ? `文档表样式：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`
+              : "还没有读到表样式。",
+          );
+          break;
+        case "open_config":
+          switchTab("config");
+          break;
+        default:
+          break;
+      }
     }
-    const pre = await preflightTableReplace({
-      draft,
-      tableStyleName: name,
-      locked,
-      host,
-    });
-    if (!pre.ok) {
-      addMessage("assistant", `预检未通过（未改文档）：${pre.error.message}`);
-      return;
-    }
-    addMessage("assistant", `样式「${name}」预检通过，开始替换（可 Undo）…`);
-    await runReplace(name);
   }
 
   async function handleUserText(raw: string): Promise<void> {
@@ -586,144 +540,43 @@ export function mountPanel(root: HTMLElement): void {
     if (!text) return;
     addMessage("user", text);
     composer.value = "";
-    let intent = parseChatIntent(text);
-    // Bare style name after recognize → continue replace (conversation continuity)
-    if (intent.kind === "unknown" || (intent.kind === "replace" && !intent.styleName)) {
-      const matched = matchTableStyleName(text, tableStyles);
-      if (matched) {
-        intent = { kind: "replace", styleName: matched };
-      }
+
+    // Local-only utilities (no model needed)
+    if (/^(清空|清除对话|clear)$/i.test(text)) {
+      history = [];
+      chatLog.innerHTML = "";
+      addMessage("assistant", "对话已清空。可以继续用自然语言描述你要做的事。");
+      return;
     }
+
+    const s = loadSettings();
+    if (!s.baseUrl || !s.apiKey || !s.model) {
+      addMessage("assistant", "模型还没配好。请到「配置」填好中转与 Model（Wire API 按你的 Codex 选 Responses）。");
+      switchTab("config");
+      return;
+    }
+
     setBusy(true);
     try {
-      if (pending?.type === "pickStyle") {
-        if (intent.kind === "cancel") {
-          pending = null;
-          addMessage("system", "已取消选样式。");
-          return;
-        }
-        if (intent.kind === "confirm") {
-          const fromSelect = (styleSelect.value || "").trim();
-          if (!fromSelect) {
-            addMessage("assistant", "请先在下方选择表样式，或直接回复样式名。");
-            return;
-          }
-          pending = null;
-          await continueWithStyle(fromSelect);
-          return;
-        }
-        const styleFromIntent =
-          intent.kind === "replace"
-            ? intent.styleName
-            : intent.kind === "autoTable"
-              ? intent.styleName
-              : undefined;
-        const matched =
-          matchTableStyleName(text, tableStyles) ||
-          (styleFromIntent
-            ? matchTableStyleName(styleFromIntent, tableStyles)
-            : null);
-        if (!matched) {
-          addMessage(
-            "assistant",
-            `还在等表样式名。请直接回复例如「货号信息表」，或说「取消」。\n可用：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`,
-          );
-          return;
-        }
-        pending = null;
-        await continueWithStyle(matched);
-        return;
-      }
-
-      if (pending?.type === "replace" && intent.kind !== "confirm" && intent.kind !== "cancel") {
+      await refreshStylesSilent();
+      addMessage("system", "顾问正在结合上下文理解…");
+      const decision = await directAgentTurn(s, {
+        context: buildAgentContext(),
+        history,
+        userMessage: text,
+      });
+      history = [
+        ...history,
+        { role: "user" as const, text },
+        { role: "assistant" as const, text: decision.reply },
+      ].slice(-20);
+      addMessage("assistant", decision.reply);
+      if (decision.actions.length) {
         addMessage(
-          "assistant",
-          "还有待确认的替换。请先回复「确认」或「取消」。",
+          "system",
+          `执行：${decision.actions.map((a) => a.type).join(" → ")}`,
         );
-        return;
-      }
-
-      switch (intent.kind) {
-        case "confirm":
-          if (pending?.type === "replace") {
-            const job = pending;
-            pending = null;
-            await runReplace(job.styleName);
-            break;
-          }
-          // Dropdown already chosen + draft ready → treat 确认 as continue
-          if (draft && (styleSelect.value || "").trim()) {
-            await continueWithStyle(styleSelect.value);
-            break;
-          }
-          addMessage("assistant", "当前没有待确认的操作。");
-          break;
-        case "cancel":
-          if (!pending) {
-            addMessage("assistant", "没有可取消的待确认操作。");
-            break;
-          }
-          pending = null;
-          addMessage("system", "已取消。");
-          break;
-        case "help":
-          addMessage(
-            "assistant",
-            "可以这样说：\n· 转成表格（全自动：读取→识别→替换）\n· 用「样式名」转成表格\n· 读取选区 / 识别表格 / 替换为真表（分步）\n· 有哪些表样式\n· 配置\n\n推荐：选中矢量伪表后直接说「转成表格」。",
-          );
-          break;
-        case "config":
-          switchTab("config");
-          addMessage("assistant", "已打开配置。改完点保存，再回来对话。");
-          break;
-        case "clear":
-          pending = null;
-          chatLog.innerHTML = "";
-          addMessage("assistant", "对话已清空。选中矢量表后，说「读取选区」开始。");
-          break;
-        case "status": {
-          const locked = getLockedSelection();
-          addMessage(
-            "assistant",
-            `运行时：${isInDesignRuntime() ? "InDesign" : "非宿主"}\n选区：${locked ? selectionSummary(locked.snapshot.selection) : "未锁定"}\n识别稿：${draft ? `${draft.rows.length} 行` : "无"}\n待确认：${pending ? pending.type : "无"}\n样式数：${tableStyles.length}`,
-          );
-          break;
-        }
-        case "styles":
-          await refreshStylesSilent();
-          addMessage(
-            "assistant",
-            tableStyles.length
-              ? `文档表样式：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`
-              : "还没有读到表样式。请先打开文档并选中对象后再试。",
-          );
-          break;
-        case "lock":
-          await doLock();
-          break;
-        case "recognize":
-          await doRecognize(intent.note);
-          break;
-        case "autoTable":
-          await doAutoTable(intent.styleName, intent.note);
-          break;
-        case "replace":
-          if (draft && intent.styleName) {
-            await continueWithStyle(intent.styleName);
-          } else if (draft && (styleSelect.value || "").trim()) {
-            await continueWithStyle(styleSelect.value);
-          } else {
-            await requestReplace(intent.styleName);
-          }
-          break;
-        case "unknown":
-          addMessage(
-            "assistant",
-            draft
-              ? "已有识别结果。请直接回复表样式名（如「货号信息表」），或点「替换为真表」。"
-              : "我还没听懂。可以说「转成表格」走全流程，或说「帮助」。",
-          );
-          break;
+        await executeAgentActions(decision.actions);
       }
     } catch (e) {
       addMessage("assistant", `出错了：${String(e)}`);
@@ -748,7 +601,7 @@ export function mountPanel(root: HTMLElement): void {
   addMessage(
     "assistant",
     isInDesignRuntime()
-      ? "你好。打开画册、选中矢量伪表后，直接说「转成表格」——我会自动读取、识别并替换。表样式可在下方先选好，或说「用「样式名」转成表格」。模型在「配置」。"
+      ? "你好。用自然语言说即可——例如「把选中的伪表转成货号信息表」。我会结合选区/识别稿/样式列表理解上下文，再执行白名单动作。模型在「配置」。"
       : "当前不在 InDesign 面板环境。连上宿主后即可处理真表替换。",
   );
 }

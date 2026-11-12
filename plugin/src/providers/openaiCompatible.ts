@@ -3,7 +3,25 @@ import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
 import { withTimeout } from "../util/timeout.js";
 
+function parseAgentNote(
+  userNote?: string,
+): { system: string; user: string } | null {
+  if (!userNote) return null;
+  try {
+    const data = JSON.parse(userNote) as { system?: string; user?: string };
+    if (typeof data.system === "string" && typeof data.user === "string") {
+      return { system: data.system, user: data.user };
+    }
+  } catch {
+    /* not agent payload */
+  }
+  return null;
+}
+
 function recoverPrompt(request: ChatRequest): string {
+  if (request.op === "agent_turn") {
+    return parseAgentNote(request.userNote)?.user ?? request.userNote ?? "";
+  }
   if (request.op === "recover_table") {
     return [
       "Recognize the table in the image.",
@@ -24,6 +42,16 @@ function recoverPrompt(request: ChatRequest): string {
     snapshot: request.snapshot,
     userNote: request.userNote,
   });
+}
+
+function systemPromptFor(request: ChatRequest): string {
+  if (request.op === "agent_turn") {
+    return (
+      parseAgentNote(request.userNote)?.system ??
+      "You are an InDesign layout agent. Output JSON only."
+    );
+  }
+  return "You extract InDesign table structure. Output JSON only. Never output scripts.";
 }
 
 function extractChatCompletionsText(httpBody: string): string {
@@ -104,7 +132,7 @@ function buildChatCompletionsBody(request: ChatRequest, settings: ProviderSettin
     messages: [
       {
         role: "system",
-        content: "You extract InDesign table structure. Output JSON only. Never output scripts.",
+        content: systemPromptFor(request),
       },
       { role: "user", content: userContent },
     ],
@@ -115,10 +143,7 @@ function buildResponsesBody(request: ChatRequest, settings: ProviderSettings): u
   const content: Array<Record<string, unknown>> = [
     {
       type: "input_text",
-      text: [
-        "You extract InDesign table structure. Output JSON only. Never output scripts.",
-        recoverPrompt(request),
-      ].join("\n"),
+      text: [systemPromptFor(request), recoverPrompt(request)].join("\n\n"),
     },
   ];
   if (request.imageDataUrl) {

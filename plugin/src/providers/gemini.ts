@@ -14,15 +14,20 @@ async function chatGemini(
   const model = settings.model || "gemini-2.0-flash";
   const url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(settings.apiKey)}`;
 
-  const parts: Array<Record<string, unknown>> = [
-    {
-      text: JSON.stringify({
-        op: request.op,
-        snapshot: request.snapshot,
-        userNote: request.userNote,
-      }),
-    },
-  ];
+  let textPayload = JSON.stringify({
+    op: request.op,
+    snapshot: request.snapshot,
+    userNote: request.userNote,
+  });
+  if (request.op === "agent_turn" && request.userNote) {
+    try {
+      const p = JSON.parse(request.userNote) as { system?: string; user?: string };
+      if (p.system && p.user) textPayload = `${p.system}\n\n${p.user}`;
+    } catch {
+      textPayload = request.userNote;
+    }
+  }
+  const parts: Array<Record<string, unknown>> = [{ text: textPayload }];
   if (request.imageDataUrl) {
     const match = /^data:(image\/[a-zA-Z0-9+.-]+);base64,(.+)$/.exec(request.imageDataUrl);
     if (match) {

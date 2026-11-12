@@ -6,6 +6,7 @@ export type ProtocolOp =
   | "analyze_and_plan"
   | "apply_commands"
   | "recover_table"
+  | "agent_turn"
   | "ping";
 
 export type Bounds = {
