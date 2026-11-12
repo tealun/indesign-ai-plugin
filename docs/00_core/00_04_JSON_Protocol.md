@@ -23,8 +23,18 @@
 | `op` | yes | `analyze_and_plan` \| `apply_commands` \| `recover_table` \| `ping` |
 | `styleProfile` | no | M0 可空对象；后期扩展 |
 | `snapshot` | yes for analyze / recover | 选区打包结果 |
-| `image` | recover_table | 选区栅格（data URL 或实现约定的本地引用）；可与用户粘贴补图合并。发送前须满足隐私提示，见 [`00_03_AI_Providers.md`](00_03_AI_Providers.md) |
+| `image` | recover_table | 选区栅格（data URL 或实现约定的本地引用）；可与用户粘贴补图合并。发送前须满足隐私提示与图像上限，见 [`00_03_AI_Providers.md`](00_03_AI_Providers.md) |
 | `error` | response | 失败时非 null；成功为 null |
+
+## Coordinate units
+
+所有 `bounds` 数值单位为 **文档点 pt**（InDesign 内部点，1 pt = 1/72 in）。导出选区图时另记像素尺寸与 PPI，不与 `bounds` 混用。
+
+```json
+"bounds": { "x": 36, "y": 80, "w": 480, "h": 220, "unit": "pt" }
+```
+
+`unit` 字段固定为 `"pt"`；缺省时按 `pt` 解释。
 
 ## DocumentSnapshot (selection pack)
 
@@ -45,14 +55,14 @@
       "fontSize": 10.5,
       "leading": 16,
       "alignment": "leftJustify",
-      "bounds": { "x": 40, "y": 60, "w": 220, "h": 400 },
+      "bounds": { "x": 40, "y": 60, "w": 220, "h": 400, "unit": "pt" },
       "spaceBefore": 0,
       "spaceAfter": 6
     },
     {
       "id": "g_1",
       "type": "group",
-      "bounds": { "x": 36, "y": 80, "w": 480, "h": 220 },
+      "bounds": { "x": 36, "y": 80, "w": 480, "h": 220, "unit": "pt" },
       "childCount": 48,
       "notes": "vector fake table candidate"
     }
@@ -62,11 +72,11 @@
 
 | `type` | Minimal fields | Used by |
 | --- | --- | --- |
-| `textFrame` | text/style/bounds as above | M0 |
+| `textFrame` | text/style/bounds as above | M0；亦作表的父容器 |
 | `group` | `id`, `bounds`, `childCount?` | M0-T 矢量组合 |
 | `graphic` | `id`, `bounds` | 单块图形/曲线对象 |
 
-规则：图层数据打包必须可逆映射到宿主对象 id；无法解析的对象跳过并记入 warnings，不中断整次请求。`removeObjects.ids` 只能引用**当前 snapshot.selection** 中的 id（或用户确认替换时锁定的同一批 id）。
+规则：图层数据打包必须可逆映射到宿主对象 id；无法解析的对象跳过并记入 warnings，不中断整次请求。`removeObjects.ids` 只能引用**替换批次锁定**的 id（见预检），且 apply 时必须仍可解析。
 
 ## LayoutCommand Whitelist (M0)
 
@@ -82,20 +92,34 @@
 | `applyParaStyle` | `targetId`, `name` |
 | `createCharStyle` | `name`, `props` |
 | `applyCharStyle` | `targetId`, `name` |
-| `createTextFrame` | `pageIndex`, `bounds`, `text?` |
+| `createTextFrame` | `pageIndex`, `bounds`, `text?` → 成功后产生 `frameId` |
 | `moveResizeFrame` | `targetId`, `bounds` |
 
 ### LayoutCommand Whitelist (M0-T additions)
 
 | type | params (minimal) |
 | --- | --- |
-| `createTable` | `pageIndex`, `bounds`, `bodyRowCount`, `columnCount`, `headerRowCount`, `footerRowCount` |
+| `createTable` | `parentFrameId`, `bodyRowCount`, `columnCount`, `headerRowCount`, `footerRowCount` → 成功后产生 `tableId` |
 | `writeCellText` | `tableId`, `row`, `column`, `text` |
-| `setHeaderFooterRowCount` | `tableId`, `headerRowCount`, `footerRowCount` |
 | `applyTableStyle` | `tableId`, `name`（必须是文档已有表样式） |
 | `removeObjects` | `ids[]`（**唯一**删除原矢量伪表的路径） |
 
-**删除路径唯一性：** 禁止在 `createTable` 上携带 `replaceSelectionIds` 或隐式删除。原对象只通过批末成功后的 `removeObjects` 删除。
+说明：
+
+- **宿主约束：** InDesign 表必须位于文本框/Story 内。禁止「仅 pageIndex+bounds、无父框」的建表。M0-T 先 `createTextFrame`（bounds=原选区），再 `createTable(parentFrameId=…)`。
+- **删除路径唯一性：** 禁止在 `createTable` / `createTextFrame` 上隐式删除原对象；只通过批末成功后的 `removeObjects`。
+- **`setHeaderFooterRowCount`：** **不在 M0-T 主路径**。头/尾行数在 `createTable` 创建时一次给定。该 type 若出现在旧草稿中 → `VALIDATION_ERROR`（M0-T）或留待后续里程碑再启用。
+
+## Command result binding
+
+批内后续命令通过符号引用先前创建结果：
+
+| Symbol | Meaning |
+| --- | --- |
+| `$created.frameId` | 本批最近一次成功的 `createTextFrame` 返回 id |
+| `$created.tableId` | 本批最近一次成功的 `createTable` 返回 id |
+
+Executor 在每条成功的创建类命令后写入 `ExecutionReport.created`；解析参数时替换 `$created.*`。未解析到 → `VALIDATION_ERROR` / `EXECUTE_ERROR`，停止后续（含 `removeObjects`）。
 
 ## Table row math (normative)
 
@@ -109,13 +133,16 @@ footer rows  = rows[headerRowCount+bodyRowCount .. rows.length)
 bodyRowCount = rows.length - headerRowCount - footerRowCount
 ```
 
+`writeCellText.row` / `.column`：**0-based**，相对**整张表**（含已在创建时声明的表头/表尾行）。  
+即 `row` 与 `TableDraft.rows` 的行下标一致；创建时宿主行数 = `rows.length`，其中前 `headerRowCount` 行为表头，末 `footerRowCount` 行为表尾。
+
 约束（M0-T）：
 
 - `headerRowCount >= 1`
 - `footerRowCount >= 0`
 - `bodyRowCount >= 1`
 - 每行 `columnCount` 相同；`columnCount >= 1`
-- 不满足上述不变量 → `VALIDATION_ERROR`，不发 `apply_commands`
+- 不满足 → `VALIDATION_ERROR`，不发 `apply_commands`
 
 示例：`headerRowCount=1`, `footerRowCount=1`, `rows` 3 行 → `bodyRowCount=1`。
 
@@ -150,22 +177,22 @@ bodyRowCount = rows.length - headerRowCount - footerRowCount
 表替换批处理必须按下列顺序，且满足预检：
 
 1. **Preflight（零写入）**
-   - 校验行列不变量
+   - 校验行列不变量与 `writeCellText` 索引范围
    - 确认 `tableStyleName` 在文档表样式列表中存在
-   - 锁定待删 `selectionIds`（来自当前选区 snapshot）
-   - 任一项失败 → `VALIDATION_ERROR`，**整批不开始**（满足 T7「缺样式不半写入」）
-2. `createTable`（不删除任何对象）
-3. `writeCellText`（按 `rows` 全量写入，含头/体/尾）
-4. `setHeaderFooterRowCount`
-5. `applyTableStyle`
+   - 锁定 `selectionIds` + 各对象 `bounds` 快照（识别/确认时采集）
+   - **Apply 时复检：** 每个 id 仍可在文档中解析；中心点或 bounds 相对锁定快照漂移 ≤ **2 pt**（可配置，默认 2）；失败 → `VALIDATION_ERROR`，整批不开始
+   - 任一项失败 → **整批不开始**（T7）
+2. `createTextFrame`（`bounds` = 原选区，单位 pt）→ `$created.frameId`
+3. `createTable`（`parentFrameId: "$created.frameId"`，创建时带齐 `headerRowCount` / `footerRowCount` / `bodyRowCount` / `columnCount`）→ `$created.tableId`
+4. `writeCellText`（`tableId: "$created.tableId"`，按 `rows` 全量写入）
+5. `applyTableStyle`（`tableId: "$created.tableId"`）
 6. **仅当 2–5 全部 ok** → `removeObjects`（删除原矢量）
 
 中途失败：
 
 - **停止后续指令**（尤其不得执行 `removeObjects`）
-- 报告已执行 / 未执行列表
-- 已写入的新表保留在文档中，依赖宿主 **Undo** 回滚；原矢量仍在
-- 这与 T7 的「缺样式不开始」不冲突：T7 管预检；中途宿主 API 失败管停止删除 + Undo
+- 报告已执行 / 未执行列表与 `created`
+- 已写入的新框/表保留，依赖宿主 **Undo**；原矢量仍在
 
 ## Error Model
 
@@ -191,11 +218,16 @@ bodyRowCount = rows.length - headerRowCount - footerRowCount
 {
   "requestId": "uuid",
   "ok": false,
+  "created": {
+    "frameId": "tf_new_1",
+    "tableId": "table_1"
+  },
   "results": [
-    { "index": 0, "type": "createTable", "ok": true },
-    { "index": 1, "type": "applyTableStyle", "ok": false, "error": { "code": "EXECUTE_ERROR", "message": "style missing at runtime" } }
+    { "index": 0, "type": "createTextFrame", "ok": true, "createdId": "tf_new_1" },
+    { "index": 1, "type": "createTable", "ok": true, "createdId": "table_1" },
+    { "index": 2, "type": "applyTableStyle", "ok": false, "error": { "code": "EXECUTE_ERROR", "message": "style apply failed" } }
   ],
-  "stoppedAt": 1,
+  "stoppedAt": 2,
   "removeObjectsSkipped": true
 }
 ```

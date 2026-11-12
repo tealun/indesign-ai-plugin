@@ -41,12 +41,16 @@ Rules:
 ```ts
 interface ProviderAdapter {
   id: string
+  supportsVision: boolean
   chat(request: ChatRequest, settings: ProviderSettings): Promise<ProviderRawResponse>
-  parseLayoutCommands(raw: ProviderRawResponse): LayoutCommand[] // 或抛出 ProtocolError
+  parseLayoutCommands(raw: ProviderRawResponse): LayoutCommand[] // M0；或抛出 ProtocolError
+  parseTableDraft(raw: ProviderRawResponse): TableDraft // M0-T；或抛出 ProtocolError
 }
 ```
 
-`ChatRequest` 含：系统提示（风格参数 / 白名单说明）、`DocumentSnapshot`、用户意图（分析 / 应用）。
+`ChatRequest` 含：系统提示（风格参数 / 白名单说明）、`DocumentSnapshot`、可选图像部件、用户意图（分析 / 应用 / recover_table）。
+
+`supportsVision === false` 时不得用于 `recover_table`。
 
 ## M0 Provider Acceptance
 
@@ -61,6 +65,19 @@ interface ProviderAdapter {
 `recover_table` 必须走**支持图像输入**的模型/中转。适配器需能把选区 PNG（及可选用户粘贴补图）与提示词一并发送，并解析 `TableDraft`。
 
 若某供应商无 vision，UI 在该模式下禁用或提示换模型；不得静默降级为无图请求。
+
+## Capture limits (image size)
+
+导出/粘贴图在发送前必须规范化：
+
+| Rule | Default |
+| --- | --- |
+| 最长边 | ≤ 2048 px（超出则等比缩放） |
+| 导出 PPI 目标 | 144 PPI（相对文档 pt bounds） |
+| 编码 | PNG；若体积仍过大可降到 JPEG quality≤80（记录 warning） |
+| 超限无法缩小时 | `VALIDATION_ERROR`，不发请求 |
+
+缩放或格式降级必须写入 `warnings`（可见于面板），对应验收 T11。
 
 ## Privacy (image egress)
 

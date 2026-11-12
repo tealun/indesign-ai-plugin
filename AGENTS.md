@@ -18,5 +18,6 @@
 3. 禁止将 API Key 写入仓库跟踪文件。
 4. M0 / M0-T 范围外能力（全书重排、知识库、印前全局校对、单元格合并等）未经里程碑文档更新不得实现。当前优先 M0-T。
 5. 兼容基线：InDesign 2024+。
-6. 表替换必须遵守 `docs/00_core/00_04_JSON_Protocol.md` 的预检与 `removeObjects` 最后删除顺序；不得在 `createTable` 隐式删对象。
-7. 选区图像外发前必须有用户明示确认。
+6. 表替换必须遵守 `docs/00_core/00_04_JSON_Protocol.md`：先 `createTextFrame` 再框内 `createTable`；预检含选区复检；`$created.*` 绑定；`removeObjects` 最后删除；不得隐式删对象。
+7. 选区图像外发前必须有用户明示确认；遵守最长边/PPI 上限。
+8. bounds 使用文档点 pt。

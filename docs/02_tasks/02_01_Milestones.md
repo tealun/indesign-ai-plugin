@@ -7,7 +7,7 @@
 | Status | Ready for implementation after scaffolding shared panel/provider |
 | Owner | implementation agent + user verification on real catalog page |
 | Goal | 选中矢量伪表 → 视觉识别 → 预览确认 → 真表 + 已有表样式 + 表头/表尾行，并替换原对象 |
-| Evidence required | T1–T8 in [`01_02_M0T_Vector_Table_Recovery.md`](../01_specs/01_02_M0T_Vector_Table_Recovery.md) |
+| Evidence required | T1–T11 in [`01_02_M0T_Vector_Table_Recovery.md`](../01_specs/01_02_M0T_Vector_Table_Recovery.md) |
 | Done criteria | 画册样例页上伪表变为可编辑真表；头/尾行正确；指定已有 Table Style 套用成功；原矢量移除 |
 | Fail criteria | 无图纯路径识字；无预览直接写入；忽略已有表样式 |
 | Depends on | 面板设置、多模态供应商（vision）、选区导出图、协议校验、表命令 executor |
@@ -18,8 +18,9 @@
 1. 选区 bounds + 栅格导出 + 面板缩略图
 2. `recover_table` 多模态请求（优先支持 vision 的供应商/中转）
 3. `TableDraft` 预览编辑（含表样式下拉 = 文档已有样式列表）
-4. 表白名单 executor：预检 → `createTable` → `writeCellText` → `setHeaderFooterRowCount` → `applyTableStyle` → 成功后才 `removeObjects`（无 `replaceSelectionIds`）
-5. 粘贴补图兜底 + 外发明示 + 错误路径手测
+4. 表白名单 executor：预检（含选区复检）→ `createTextFrame` → `createTable(parentFrameId)` → `writeCellText` → `applyTableStyle` → 成功后才 `removeObjects`；`$created.*` 绑定
+5. 粘贴补图兜底 + 外发明示 + 图像上限 + 错误路径手测
+6. 实机验证：ID 2024 框内建表 + 表头/表尾行 + Undo（关闭 F8 To Verify）
 
 > 与 M0 主线关系：M0-T **优先**交付紧急价值；共享脚手架（空面板、settings、openai_compatible+vision）先为 M0-T 服务，再补齐段/字符样式微调 AC。
 
