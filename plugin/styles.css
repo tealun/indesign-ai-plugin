@@ -1,18 +1,18 @@
+/* UXP-safe styles: avoid pill radius (999px) and native <button> — they render broken in InDesign UXP. */
+
 :root {
-  --bg0: #12141a;
-  --bg1: #1a1e27;
-  --bg2: #222833;
-  --line: #323946;
-  --text: #eef1f6;
-  --muted: #9aa3b2;
-  --accent: #d4a574;
-  --accent-press: #e0b88a;
-  --user: #2a3344;
-  --bot: #1c222d;
-  --sys: transparent;
-  --radius: 10px;
-  --font: "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-    sans-serif;
+  --bg: #1e1e1e;
+  --bg-elev: #2a2a2a;
+  --bg-input: #141414;
+  --line: #3e3e3e;
+  --text: #f0f0f0;
+  --muted: #a0a0a0;
+  --accent: #c4a574;
+  --accent-text: #1a1a1a;
+  --user-bg: #2c3544;
+  --bot-bg: #252525;
+  --r: 4px;
+  --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 * {
@@ -22,188 +22,194 @@
 html,
 body {
   margin: 0;
+  padding: 0;
+  width: 100%;
   height: 100%;
-  background: var(--bg0);
+  background-color: var(--bg);
   color: var(--text);
   font-family: var(--font);
   font-size: 13px;
+  overflow: hidden;
 }
 
 .app {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
-  min-height: 100vh;
-  background:
-    radial-gradient(120% 80% at 100% 0%, rgba(212, 165, 116, 0.08), transparent 50%),
-    linear-gradient(180deg, #151821 0%, var(--bg0) 40%);
+  background-color: var(--bg);
 }
 
 .top {
   display: flex;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 14px 14px 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--line);
+  background-color: var(--bg);
+  flex-shrink: 0;
 }
 
 .top h1 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: 0.02em;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .sub {
-  margin: 2px 0 0;
+  margin: 2px 0 0 0;
+  padding: 0;
   color: var(--muted);
   font-size: 11px;
 }
 
 .tabs {
   display: flex;
-  gap: 4px;
-  background: var(--bg1);
-  padding: 3px;
-  border-radius: 999px;
+  flex-direction: row;
   border: 1px solid var(--line);
+  background-color: var(--bg-input);
 }
 
 .tab {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
+  margin: 0;
   padding: 6px 12px;
-  border-radius: 999px;
+  border: none;
+  background-color: transparent;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 12px;
   cursor: pointer;
-  font: inherit;
 }
 
 .tab.active {
-  background: var(--bg2);
+  background-color: var(--bg-elev);
   color: var(--text);
 }
 
 .view {
-  flex: 1;
   display: flex;
   flex-direction: column;
+  flex-grow: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .view-config {
-  padding: 14px;
-  gap: 10px;
+  padding: 12px;
   overflow: auto;
 }
 
-.view-chat {
-  min-height: 0;
-}
-
-.hidden {
-  display: none !important;
-}
-
-.lede {
-  margin: 0 0 4px;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.view-config label {
+  display: block;
+  margin: 0 0 10px 0;
   color: var(--muted);
   font-size: 12px;
 }
 
-input,
-select,
-textarea,
-button {
-  font: inherit;
-}
-
-input,
-select,
-textarea {
-  background: var(--bg1);
-  color: var(--text);
+.view-config input,
+.view-config select {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: var(--r);
+  background-color: var(--bg-input);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
 }
 
 .grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: row;
   gap: 8px;
 }
 
-.btn {
+.grid-2 label {
+  flex-grow: 1;
+  width: 50%;
+}
+
+.lede {
+  margin: 0 0 12px 0;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Clickable controls as div — native button chrome breaks in UXP */
+.ctl {
+  display: inline-block;
+  margin: 0;
+  padding: 8px 12px;
   border: 1px solid var(--line);
-  background: var(--bg2);
+  border-radius: var(--r);
+  background-color: var(--bg-elev);
   color: var(--text);
-  border-radius: 8px;
-  padding: 9px 12px;
+  font-family: var(--font);
+  font-size: 12px;
+  text-align: center;
   cursor: pointer;
 }
 
-.btn.primary {
-  background: var(--accent);
-  border-color: transparent;
-  color: #1a140e;
+.ctl-primary {
+  border-color: var(--accent);
+  background-color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
 }
 
-.btn.primary:disabled {
-  opacity: 0.55;
+.ctl-disabled {
+  opacity: 0.5;
   cursor: default;
 }
 
 .chat-log {
-  flex: 1;
+  flex-grow: 1;
   overflow: auto;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  padding: 12px;
+  background-color: var(--bg);
 }
 
 .msg {
-  max-width: 96%;
-  border-radius: var(--radius);
+  margin: 0 0 10px 0;
   padding: 8px 10px;
   border: 1px solid var(--line);
+  border-radius: var(--r);
+  max-width: 95%;
 }
 
 .msg-user {
-  align-self: flex-end;
-  background: var(--user);
+  margin-left: auto;
+  background-color: var(--user-bg);
 }
 
 .msg-assistant {
-  align-self: flex-start;
-  background: var(--bot);
+  margin-right: auto;
+  background-color: var(--bot-bg);
 }
 
 .msg-system {
-  align-self: center;
+  margin-left: auto;
+  margin-right: auto;
   border-style: dashed;
+  background-color: transparent;
   color: var(--muted);
-  background: transparent;
   font-size: 12px;
+  text-align: center;
 }
 
 .msg-role {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  margin: 0 0 4px 0;
   color: var(--accent);
-  margin-bottom: 4px;
+  font-size: 10px;
 }
 
 .msg-user .msg-role {
@@ -211,90 +217,109 @@ textarea {
 }
 
 .msg-body {
+  margin: 0;
   white-space: pre-wrap;
-  line-height: 1.45;
+  line-height: 1.4;
+  color: var(--text);
 }
 
 .thumb {
-  margin: 0 14px 8px;
-  max-height: 120px;
-  object-fit: contain;
-  width: calc(100% - 28px);
-  border-radius: 8px;
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 100px;
+  margin: 0 12px 8px 12px;
   border: 1px solid var(--line);
-  background: #0c0e12;
+  border-radius: var(--r);
+  background-color: #111;
 }
 
 .chips {
   display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
+  padding: 0 12px 8px 12px;
   gap: 6px;
-  padding: 0 14px 8px;
+  flex-shrink: 0;
 }
 
 .chip {
+  display: inline-block;
+  padding: 6px 10px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--r);
+  background-color: var(--bg-elev);
   color: var(--text);
-  border-radius: 999px;
-  padding: 5px 10px;
+  font-family: var(--font);
   font-size: 12px;
   cursor: pointer;
 }
 
-.chip:hover {
-  border-color: var(--accent);
-  color: var(--accent-press);
-}
-
 .composer-bar {
+  flex-shrink: 0;
+  padding: 10px 12px 12px 12px;
   border-top: 1px solid var(--line);
-  padding: 10px 14px 12px;
-  background: rgba(18, 20, 26, 0.92);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  background-color: var(--bg-elev);
 }
 
 .composer-meta {
   display: flex;
+  flex-direction: row;
   align-items: center;
+  margin-bottom: 8px;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
 .meta-label {
   color: var(--muted);
   font-size: 11px;
+  flex-shrink: 0;
 }
 
 .style-select {
-  flex: 1;
-  min-width: 120px;
+  flex-grow: 1;
+  min-width: 80px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background-color: var(--bg-input);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
 }
 
 .file-label {
   color: var(--accent);
-  cursor: pointer;
   font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .file-input {
-  width: 0.1px;
-  height: 0.1px;
+  width: 1px;
+  height: 1px;
   opacity: 0;
-  overflow: hidden;
   position: absolute;
-  z-index: -1;
+  left: -9999px;
 }
 
 .composer {
+  display: block;
   width: 100%;
+  min-height: 56px;
+  margin: 0 0 8px 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background-color: var(--bg-input);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
   resize: none;
-  min-height: 52px;
 }
 
 .composer-actions {
   display: flex;
+  flex-direction: row;
   justify-content: flex-end;
 }

@@ -1,8 +1,10 @@
 import { listProviders } from "../providers/registry.js";
 import { loadSettings, maskApiKey, saveSettings } from "../settings/store.js";
 import type { ProviderSettings, ProviderType, TableDraft } from "../types/protocol.js";
-import { PROTOCOL_VERSION } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
+
+const PLUGIN_UI_VERSION = "0.2.2";
+
 import { runCommandBatch } from "../executor/runBatch.js";
 import { buildTableReplaceCommands } from "../protocol/buildTableReplaceCommands.js";
 import { readSelectionSnapshot } from "../selection/snapshot.js";
@@ -84,7 +86,7 @@ export function mountPanel(root: HTMLElement): void {
 
   function setBusy(v: boolean): void {
     busy = v;
-    sendBtn.disabled = v;
+    sendBtn.classList.toggle("ctl-disabled", v);
     composer.disabled = v;
   }
 
@@ -108,10 +110,10 @@ export function mountPanel(root: HTMLElement): void {
     }
   }
 
-  // —— Tabs ——
-  const tabChat = el("button", { className: "tab active", type: "button" }, ["对话"]);
-  const tabConfig = el("button", { className: "tab", type: "button" }, ["配置"]);
-  const tabs = el("nav", { className: "tabs" }, [tabChat, tabConfig]);
+  // —— Tabs (div, not button — UXP native buttons render broken) ——
+  const tabChat = el("div", { className: "tab active", role: "button" }, ["对话"]);
+  const tabConfig = el("div", { className: "tab", role: "button" }, ["配置"]);
+  const tabs = el("div", { className: "tabs" }, [tabChat, tabConfig]);
 
   const chatView = el("section", { className: "view view-chat" });
   const configView = el("section", { className: "view view-config hidden" });
@@ -172,7 +174,7 @@ export function mountPanel(root: HTMLElement): void {
         }),
       ]),
     ]),
-    el("button", { id: "saveConfig", className: "btn primary", type: "button" }, [
+    el("div", { id: "saveConfig", className: "ctl ctl-primary", role: "button" }, [
       "保存配置",
     ]),
   );
@@ -186,9 +188,9 @@ export function mountPanel(root: HTMLElement): void {
     chip("有哪些表样式", () => void handleUserText("有哪些表样式")),
   ]);
 
-  const sendBtn = el("button", { className: "btn primary send", type: "button" }, [
+  const sendBtn = el("div", { className: "ctl ctl-primary send", role: "button" }, [
     "发送",
-  ]) as HTMLButtonElement;
+  ]);
   const fileInput = el("input", {
     id: "pasteFile",
     type: "file",
@@ -213,7 +215,7 @@ export function mountPanel(root: HTMLElement): void {
     el("header", { className: "top" }, [
       el("div", {}, [
         el("h1", {}, ["InDesign AI"]),
-        el("p", { className: "sub" }, [`对话顾问 · v${PROTOCOL_VERSION}`]),
+        el("p", { className: "sub" }, [`对话顾问 · v${PLUGIN_UI_VERSION}`]),
       ]),
       tabs,
     ]),
@@ -221,8 +223,8 @@ export function mountPanel(root: HTMLElement): void {
     configView,
   );
 
-  function chip(label: string, onClick: () => void): HTMLButtonElement {
-    const b = el("button", { className: "chip", type: "button" }, [label]);
+  function chip(label: string, onClick: () => void): HTMLDivElement {
+    const b = el("div", { className: "chip", role: "button" }, [label]);
     b.addEventListener("click", onClick);
     return b;
   }
@@ -467,10 +469,14 @@ export function mountPanel(root: HTMLElement): void {
     }
   }
 
-  sendBtn.addEventListener("click", () => void handleUserText(composer.value));
+  sendBtn.addEventListener("click", () => {
+    if (sendBtn.classList.contains("ctl-disabled")) return;
+    void handleUserText(composer.value);
+  });
   composer.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter" && !ev.shiftKey) {
       ev.preventDefault();
+      if (busy) return;
       void handleUserText(composer.value);
     }
   });
