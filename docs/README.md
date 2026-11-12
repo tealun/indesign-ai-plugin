@@ -15,6 +15,7 @@ InDesign AI 插件的权威文档入口。实现与改动前先读对应域的�
 | M0 feature behavior | [`01_specs/01_01_M0_Selection_Layout.md`](01_specs/01_01_M0_Selection_Layout.md) |
 | M0-T vector table recovery | [`01_specs/01_02_M0T_Vector_Table_Recovery.md`](01_specs/01_02_M0T_Vector_Table_Recovery.md) |
 | Milestone gates | [`02_tasks/02_01_Milestones.md`](02_tasks/02_01_Milestones.md) |
+| M0-T 可用版操作手册 | [`02_tasks/02_02_Usable_M0T_Runbook.md`](02_tasks/02_02_Usable_M0T_Runbook.md) |
 | Roadmap / deferred scope | [`88_planning/88_01_Roadmap.md`](88_planning/88_01_Roadmap.md) |
 | Planning readiness (M0) | [`99_audits/99_01_planning_readiness.md`](99_audits/99_01_planning_readiness.md) |
 | Planning readiness (M0-T) | [`99_audits/99_02_m0t_planning_readiness.md`](99_audits/99_02_m0t_planning_readiness.md) |

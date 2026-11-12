@@ -118,3 +118,52 @@ ul {
   color: var(--text);
   font-size: 12px;
 }
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.thumb {
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+  background: #0e1116;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 140px;
+  background: #12151a;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+details.card > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.paste {
+  margin-top: 4px;
+}

@@ -23,11 +23,12 @@ async function run() {
     entryPoints: [join(root, "plugin/src/index.ts")],
     bundle: true,
     outfile: join(dist, "main.js"),
-    format: "iife",
-    platform: "browser",
+    format: "cjs",
+    platform: "neutral",
     target: ["es2020"],
     sourcemap: true,
     logLevel: "info",
+    external: ["indesign", "uxp", "os", "fs", "path", "photoshop", "application"],
   });
 
   if (watch) {

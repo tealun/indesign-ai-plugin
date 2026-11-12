@@ -1,3 +1,8 @@
+import { isInDesignRuntime } from "../host/uxpRequire.js";
+import { exportSelectionToPngDataUrl } from "../host/indesignHost.js";
+import { getLockedSelection } from "../host/session.js";
+import { CAPTURE_MAX_EDGE } from "./limits.js";
+
 export type CaptureResult = {
   dataUrl: string;
   width: number;
@@ -6,21 +11,29 @@ export type CaptureResult = {
   warnings: string[];
 };
 
-export const CAPTURE_MAX_EDGE = 2048;
-export const CAPTURE_TARGET_PPI = 144;
+export { CAPTURE_MAX_EDGE, CAPTURE_TARGET_PPI } from "./limits.js";
 
-/**
- * Export selection raster. Scaffold stub — real UXP/ID export in M0-T slice 1.
- * Always applies longest-edge limit policy in normalizeCaptureSize helpers.
- */
 export async function exportSelectionPng(): Promise<CaptureResult> {
-  return {
-    dataUrl: "",
-    width: 0,
-    height: 0,
-    scaled: false,
-    warnings: ["capture bridge not implemented — scaffold stub"],
-  };
+  const locked = getLockedSelection();
+  if (!locked || locked.ids.length === 0) {
+    return {
+      dataUrl: "",
+      width: 0,
+      height: 0,
+      scaled: false,
+      warnings: ["请先读取并锁定选区"],
+    };
+  }
+  if (!isInDesignRuntime()) {
+    return {
+      dataUrl: "",
+      width: 0,
+      height: 0,
+      scaled: false,
+      warnings: ["非 InDesign 运行时，无法导出选区图"],
+    };
+  }
+  return exportSelectionToPngDataUrl(locked.ids);
 }
 
 export function normalizeEdge(

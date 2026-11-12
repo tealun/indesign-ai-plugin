@@ -6,9 +6,7 @@ export interface DocumentHost {
   execute(command: LayoutCommand, ctx: ExecuteContext): Promise<ExecuteStepResult>;
   styleExists(kind: "table" | "para" | "char", name: string): Promise<boolean>;
   objectExists(id: string): Promise<boolean>;
-  getObjectBounds(
-    id: string,
-  ): Promise<{ x: number; y: number; w: number; h: number } | null>;
+  getObjectBounds(id: string): Promise<import("../types/protocol.js").Bounds | null>;
 }
 
 export type ExecuteContext = {

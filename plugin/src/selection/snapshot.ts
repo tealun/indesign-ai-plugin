@@ -1,13 +1,14 @@
 import type { DocumentSnapshot } from "../types/protocol.js";
+import { isInDesignRuntime } from "../host/uxpRequire.js";
+import { readLiveSelectionSnapshot } from "../host/indesignHost.js";
 
-/**
- * Read current InDesign selection into DocumentSnapshot.
- * Scaffold returns empty selection until host bridge is wired (M0-T slice 1).
- */
 export async function readSelectionSnapshot(): Promise<DocumentSnapshot> {
-  return {
-    documentName: "(no document bridge yet)",
-    pageIndex: 0,
-    selection: [],
-  };
+  if (!isInDesignRuntime()) {
+    return {
+      documentName: "(browser stub)",
+      pageIndex: 0,
+      selection: [],
+    };
+  }
+  return readLiveSelectionSnapshot();
 }
