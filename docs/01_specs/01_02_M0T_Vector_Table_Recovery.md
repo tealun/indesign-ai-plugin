@@ -15,25 +15,28 @@
 
 1. 用户选中伪表矢量组（Group / Compound 等）。
 2. 插件读取页面索引与 `bounds`，将选区栅格化为 PNG（或等价位图）。
-3. 多模态模型返回 `TableDraft` JSON（行列文本、表头/表尾行数、可选合并单元格）。
-4. 面板展示可编辑预览；用户可改字、改头/尾行数、选择已有 `tableStyleName`。
-5. 用户确认「替换」后，executor 白名单执行：建表 → 写单元格 → 设头/尾行 → 套表样式 → 删除或移走原矢量选区。
-6. 整次替换应可 Undo（或明确文档限制）。
+3. **发送前**面板明示：选区图像将发往当前配置的 API Base URL；用户确认后才请求。
+4. 多模态模型返回 `TableDraft` JSON（行列文本、表头/表尾行数；`merges` 忽略）。
+5. 面板展示可编辑预览；用户可改字、改头/尾行数、从文档已有列表选择 `tableStyleName`。
+6. 用户确认「替换」后：**预检**样式名存在与行列不变量 → `createTable` → `writeCellText`* → `setHeaderFooterRowCount` → `applyTableStyle` → **仅成功后** `removeObjects`。
+7. 整次替换应可 Undo；中途失败不删原矢量。
 
 ## In Scope
 
 - 选区 bounds + 自动截图识别
 - 预览编辑后再写入
-- `headerRowCount` / `footerRowCount`
+- `headerRowCount` / `footerRowCount` 与 `rows` 行列不变量（见 `00_04`）
 - `applyTableStyle` 使用文档已有样式名
 - 手动粘贴补充截图（识别不准时的兜底）
+- 图像外发明示确认
 
 ## Out of Scope (this spike)
 
 - 全书批量表转换
 - 自动新建复杂表样式（只用已有）
-- 单元格样式精细映射、斜线表头艺术字还原
+- 单元格合并（`merges`）、单元格样式精细映射、斜线表头艺术字还原
 - 无选区的整页盲识别
+- `createTable` 内隐式删除原对象（删除只走 `removeObjects`）
 
 ## Protocol Additions
 
@@ -49,8 +52,9 @@
 | T4 | 成功 `applyTableStyle` 到用户指定的已有样式名 | 样式面板可见应用结果 |
 | T5 | 新表位置/尺寸对齐原选区 bounds（允许小误差） | 前后叠图或坐标记录 |
 | T6 | 原矢量组被移除或移出正文层 | 页面上只留真表 |
-| T7 | 非法/缺样式名时 fail-closed，不半写入 | 错误码 + 文档未残缺表 |
+| T7 | 缺样式名或行列不合法时预检失败，**零写入**；中途失败则不执行 `removeObjects` | 错误码 + 无新表或原矢量仍在 |
 | T8 | 识别错误时可粘贴补图或手改预览后成功替换 | 一次纠正路径演示 |
+| T9 | 发送识别请求前有外发图像明示，可取消 | UI 文案/取消路径 |
 
 ## Fail Criteria
 

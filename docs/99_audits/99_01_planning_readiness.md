@@ -5,9 +5,9 @@ Scope: M0 planning artifacts only (no plugin business code yet)
 
 ## Verdict
 
-**Ready for M0 implementation scaffolding**
+**Ready for M0 implementation scaffolding** — **superseded in priority by M0-T**（见 [`99_02_m0t_planning_readiness.md`](99_02_m0t_planning_readiness.md) 与 [`99_03_planning_audit.md`](99_03_planning_audit.md)）。
 
-产品目标、非目标、架构边界、供应商策略、JSON 白名单与里程碑门禁已由用户确认并落盘。实现前无未关闭的产品级 P0 决策缺口；剩余 To Verify 均为 M0 实机/实调证据项。
+产品目标、非目标、架构边界、供应商策略、JSON 白名单与里程碑门禁已由用户确认并落盘。M0 基线仍有效，但共享脚手架与首个交付以 M0-T 为先。剩余 To Verify 见 `88_02`。
 
 ## Checks
 

@@ -18,8 +18,8 @@
 1. 选区 bounds + 栅格导出 + 面板缩略图
 2. `recover_table` 多模态请求（优先支持 vision 的供应商/中转）
 3. `TableDraft` 预览编辑（含表样式下拉 = 文档已有样式列表）
-4. 表白名单 executor：`createTable` / `writeCellText` / `setHeaderFooterRowCount` / `applyTableStyle` / `removeObjects`
-5. 粘贴补图兜底 + 错误路径手测
+4. 表白名单 executor：预检 → `createTable` → `writeCellText` → `setHeaderFooterRowCount` → `applyTableStyle` → 成功后才 `removeObjects`（无 `replaceSelectionIds`）
+5. 粘贴补图兜底 + 外发明示 + 错误路径手测
 
 > 与 M0 主线关系：M0-T **优先**交付紧急价值；共享脚手架（空面板、settings、openai_compatible+vision）先为 M0-T 服务，再补齐段/字符样式微调 AC。
 

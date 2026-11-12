@@ -39,7 +39,7 @@ uxp-panel/
 | --- | --- |
 | API Key | 仅本机设置存储；日志与错误展示脱敏 |
 | Model output | schema 校验 + command 白名单；失败则零写入或停止后续指令 |
-| Partial apply | 每条指令独立结果；汇总 `ExecutionReport`；优先依赖宿主 Undo |
+| Partial apply | 通用批：中途失败停止后续，已成功项靠 Undo。M0-T 表替换：预检零写入；`removeObjects` 仅在建表+样式成功后 |
 | CORS / network | UXP 网络权限在 manifest 声明；中转 URL 可配置 |
 | Version drift | 文档与代码标注 ID 2024 基线；使用高版本-only API 必须记入里程碑风险 |
 

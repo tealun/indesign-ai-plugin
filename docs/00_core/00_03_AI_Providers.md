@@ -62,6 +62,15 @@ interface ProviderAdapter {
 
 若某供应商无 vision，UI 在该模式下禁用或提示换模型；不得静默降级为无图请求。
 
+## Privacy (image egress)
+
+选区图与粘贴补图属于客户画册内容，可能含商业数据：
+
+1. 发起 `recover_table` 前，面板必须明示：**图像将发送到当前 `baseUrl` 所指向的服务**；提供确认 / 取消。
+2. 默认不在日志中持久化原图或完整 data URL；排障若需留样须另开显式开关且默认关闭。
+3. API Key 与图像均不得写入仓库跟踪文件。
+4. 设置中可关闭「允许粘贴补图外发」（仍可用自动选区图，或完全取消识别）。
+
 ## Prompt / Style Switching
 
 不使用多 Agent 进程。通过动态配置注入：

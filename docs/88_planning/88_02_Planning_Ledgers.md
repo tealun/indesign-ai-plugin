@@ -22,8 +22,10 @@ Updated: 2026-11-12 after user confirmation of M0-T urgent spike.
 - DeepSeek 走 OpenAI 兼容适配器；M0-T 优先选用**支持 vision** 的中转/模型 — until 实调名单确定。
 - API Key 仅存本机面板设置 — until 统一后端接管鉴权。
 - 批处理遇非法命令 fail-closed 整批拒绝；执行中单条失败则停止后续 — until 用户要求改成尽力执行。
+- M0-T 表替换：预检零写入；删原对象仅 `removeObjects` 且仅在建表+样式成功后；`merges` 忽略 — per audit 99_03。
 - 风格切换用 `styleProfile` / 提示词，不新增多 Agent 进程 — until 产品决策变更。
 - 用户文档中已存在可点名的 Table Style — confirmed 2026-11-12。
+- `rows` 含头/体/尾；`bodyRowCount = rows.length - header - footer` — per audit 99_03。
 
 ## To Verify
 
