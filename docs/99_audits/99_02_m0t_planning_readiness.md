@@ -21,4 +21,4 @@ Scope: Urgent vector-table recovery spike planning
 
 ## Next Exact Step
 
-协议缺口已在 [`99_03_planning_audit.md`](99_03_planning_audit.md) 与 [`99_04_deep_planning_audit.md`](99_04_deep_planning_audit.md) 修复（含框内建表、`$created` 绑定、选区复检）。搭建共享 UXP 面板与 settings 后，立即做 M0-T slice 1（选区导出图），再接 vision `recover_table`。
+协议缺口已在 [`99_03`](99_03_planning_audit.md) / [`99_04`](99_04_deep_planning_audit.md) 修复。共享 UXP 框架已脚手架化（`npm run check` 通过）。**下一步：M0-T slice 1（选区 bounds + 栅格导出 + 面板缩略图）**，再接 vision `recover_table`。

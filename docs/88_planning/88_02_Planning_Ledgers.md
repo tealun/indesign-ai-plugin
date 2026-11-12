@@ -27,6 +27,7 @@ Updated: 2026-11-12 after user confirmation of M0-T urgent spike.
 - 风格切换用 `styleProfile` / 提示词，不新增多 Agent 进程 — until 产品决策变更。
 - 用户文档中已存在可点名的 Table Style — confirmed 2026-11-12。
 - `rows` 含头/体/尾；`bodyRowCount = rows.length - header - footer`；`writeCellText.row` 0-based 对整表 — per audit 99_03/99_04。
+- 技术栈：TypeScript strict + esbuild + 原生 UXP HTML/CSS（暂不 React/SWC）；Node≥18；ID host minVersion 19.0.0 — confirmed scaffolding 2026-11-12。
 
 ## To Verify
 

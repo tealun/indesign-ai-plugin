@@ -54,13 +54,20 @@ uxp-panel/
 
 两者都产出相同的 `LayoutCommand[]`。后端上线时不改 executor / selection 主路径。
 
-## Repo Layout (planned)
+## Repo Layout
 
 ```text
 /
   AGENTS.md
   README.md
-  docs/                 # 本规划体系
-  plugin/               # UXP 插件源码（实现阶段创建）
-  scripts/              # 打包 / 校验辅助（按需）
+  package.json          # npm scripts: typecheck / build / test
+  docs/                 # 规划体系（含 00_06 技术栈）
+  plugin/               # UXP 源码与 manifest / index.html / styles
+    src/
+      ui/ selection/ capture/ protocol/
+      providers/ executor/ settings/ transport/ types/
+  scripts/build.mjs     # esbuild → dist/
+  dist/                 # UDT 加载目录（构建产物，不入库）
 ```
+
+技术栈锁定见 [`00_06_Tech_Stack.md`](00_06_Tech_Stack.md)。
