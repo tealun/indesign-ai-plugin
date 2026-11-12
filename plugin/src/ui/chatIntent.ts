@@ -3,6 +3,8 @@ export type ChatIntent =
   | { kind: "lock" }
   | { kind: "recognize"; note?: string }
   | { kind: "replace"; styleName?: string }
+  | { kind: "confirm" }
+  | { kind: "cancel" }
   | { kind: "styles" }
   | { kind: "status" }
   | { kind: "config" }
@@ -18,6 +20,10 @@ export function parseChatIntent(raw: string): ChatIntent {
   if (/^(清空|清除对话|clear)/i.test(text)) return { kind: "clear" };
   if (/^(配置|设置|settings|config)/i.test(text)) return { kind: "config" };
   if (/^(状态|status)/i.test(text)) return { kind: "status" };
+  if (/^(确认|确认发送|确认替换|继续|好的|可以|yes|ok)$/i.test(text)) {
+    return { kind: "confirm" };
+  }
+  if (/^(取消|不要|算了|no|cancel)$/i.test(text)) return { kind: "cancel" };
   if (/(表样式|样式列表|有哪些样式)/.test(text)) return { kind: "styles" };
 
   if (/(读取选区|锁定选区|读选区|选中了什么|看选区)/.test(text)) {

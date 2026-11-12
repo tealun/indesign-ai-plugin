@@ -3,7 +3,7 @@ import { loadSettings, maskApiKey, saveSettings } from "../settings/store.js";
 import type { ProviderSettings, ProviderType, TableDraft } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.2.2";
+const PLUGIN_UI_VERSION = "0.2.3";
 
 import { runCommandBatch } from "../executor/runBatch.js";
 import { buildTableReplaceCommands } from "../protocol/buildTableReplaceCommands.js";
@@ -57,6 +57,11 @@ export function mountPanel(root: HTMLElement): void {
   let draft: TableDraft | null = null;
   let tableStyles: string[] = [];
   let busy = false;
+  /** UXP has no window.confirm — confirm in chat instead. */
+  let pending:
+    | null
+    | { type: "recognize"; note?: string }
+    | { type: "replace"; styleName: string } = null;
 
   const chatLog = el("div", { className: "chat-log", id: "chatLog" });
   const composer = el("textarea", {
@@ -184,8 +189,8 @@ export function mountPanel(root: HTMLElement): void {
   const chips = el("div", { className: "chips" }, [
     chip("读取选区", () => void handleUserText("读取选区")),
     chip("识别表格", () => void handleUserText("识别表格")),
+    chip("确认", () => void handleUserText("确认")),
     chip("替换为真表", () => void handleUserText("替换为真表")),
-    chip("有哪些表样式", () => void handleUserText("有哪些表样式")),
   ]);
 
   const sendBtn = el("div", { className: "ctl ctl-primary send", role: "button" }, [
@@ -281,7 +286,7 @@ export function mountPanel(root: HTMLElement): void {
     );
   }
 
-  async function doRecognize(note?: string): Promise<void> {
+  async function requestRecognize(note?: string): Promise<void> {
     const locked = getLockedSelection();
     if (!locked) {
       addMessage("assistant", "还没有锁定选区。先说「读取选区」。");
@@ -293,14 +298,20 @@ export function mountPanel(root: HTMLElement): void {
       switchTab("config");
       return;
     }
-    const okSend = confirm(
-      `即将把选区图像发送到：\n${s.baseUrl}\n\n用于表格识别。是否继续？`,
+    pending = note ? { type: "recognize", note } : { type: "recognize" };
+    addMessage(
+      "assistant",
+      `识别需要把选区图像发送到：\n${s.baseUrl}\n\n回复「确认」继续，或「取消」。`,
     );
-    if (!okSend) {
-      addMessage("system", "已取消外发。");
+  }
+
+  async function runRecognize(note?: string): Promise<void> {
+    const locked = getLockedSelection();
+    if (!locked) {
+      addMessage("assistant", "选区已失效，请重新「读取选区」。");
       return;
     }
-
+    const s = loadSettings();
     addMessage("assistant", "正在导出选区并识别…");
     if (!imageDataUrl) {
       const cap = await exportSelectionPng();
@@ -338,11 +349,11 @@ export function mountPanel(root: HTMLElement): void {
       .join("\n");
     addMessage(
       "assistant",
-      `识别到 ${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列（表头 ${draft.headerRowCount} / 表尾 ${draft.footerRowCount}）。\n\n预览：\n${preview}${draft.rows.length > 8 ? "\n…" : ""}\n\n请在下方选择表样式，然后说「替换为真表」或「用样式名替换」。识别不准可先补图再识别。`,
+      `识别到 ${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列（表头 ${draft.headerRowCount} / 表尾 ${draft.footerRowCount}）。\n\n预览：\n${preview}${draft.rows.length > 8 ? "\n…" : ""}\n\n请选择表样式，然后说「替换为真表」或「用样式名替换」。`,
     );
   }
 
-  async function doReplace(styleName?: string): Promise<void> {
+  async function requestReplace(styleName?: string): Promise<void> {
     const locked = getLockedSelection();
     if (!locked) {
       addMessage("assistant", "没有锁定选区，无法替换。");
@@ -369,26 +380,35 @@ export function mountPanel(root: HTMLElement): void {
       addMessage("assistant", `预检未通过（未改文档）：${pre.error.message}`);
       return;
     }
+    pending = { type: "replace", styleName: name };
+    addMessage(
+      "assistant",
+      `将创建真表并删除原矢量，样式「${name}」（可 Undo）。\n回复「确认」继续，或「取消」。`,
+    );
+  }
+
+  async function runReplace(styleName: string): Promise<void> {
+    const locked = getLockedSelection();
+    if (!locked || !draft) {
+      addMessage("assistant", "状态已变化，请重新识别后再替换。");
+      return;
+    }
     const built = buildTableReplaceCommands({
       pageIndex: locked.pageIndex,
       bounds: locked.unionBounds,
       draft,
-      tableStyleName: name,
+      tableStyleName: styleName,
       selectionIds: locked.ids,
     });
     if (!built.ok) {
       addMessage("assistant", `无法生成指令：${built.error.message}`);
       return;
     }
-    if (!confirm(`将创建真表并删除原矢量，样式「${name}」。可 Undo。继续？`)) {
-      addMessage("system", "已取消替换。");
-      return;
-    }
     addMessage("assistant", "正在写入真表…");
     const report = await runCommandBatch({
       requestId: crypto.randomUUID(),
       commands: built.commands,
-      host,
+      host: getHost(),
     });
     if (!report.ok) {
       const err = report.results.find((r) => !r.ok)?.error?.message || "未知错误";
@@ -402,7 +422,7 @@ export function mountPanel(root: HTMLElement): void {
     imageDataUrl = "";
     draft = null;
     thumb.classList.add("hidden");
-    addMessage("assistant", `完成：已用样式「${name}」生成真表，原矢量已删除。`);
+    addMessage("assistant", `完成：已用样式「${styleName}」生成真表，原矢量已删除。`);
   }
 
   async function handleUserText(raw: string): Promise<void> {
@@ -414,11 +434,39 @@ export function mountPanel(root: HTMLElement): void {
     const intent = parseChatIntent(text);
     setBusy(true);
     try {
+      if (pending && intent.kind !== "confirm" && intent.kind !== "cancel") {
+        addMessage(
+          "assistant",
+          `还有待确认的操作。请先回复「确认」或「取消」（当前：${pending.type === "recognize" ? "外发识别" : "替换真表"}）。`,
+        );
+        return;
+      }
+
       switch (intent.kind) {
+        case "confirm":
+          if (!pending) {
+            addMessage("assistant", "当前没有待确认的操作。");
+            break;
+          }
+          {
+            const job = pending;
+            pending = null;
+            if (job.type === "recognize") await runRecognize(job.note);
+            else await runReplace(job.styleName);
+          }
+          break;
+        case "cancel":
+          if (!pending) {
+            addMessage("assistant", "没有可取消的待确认操作。");
+            break;
+          }
+          pending = null;
+          addMessage("system", "已取消。");
+          break;
         case "help":
           addMessage(
             "assistant",
-            "可以这样说：\n· 读取选区\n· 识别表格\n· 用「样式名」替换 / 替换为真表\n· 有哪些表样式\n· 配置（打开配置页）\n\n流程：选中矢量表 → 读取 → 识别 → 选样式 → 替换。",
+            "可以这样说：\n· 读取选区\n· 识别表格\n· 用「样式名」替换 / 替换为真表\n· 确认 / 取消（外发与替换前）\n· 有哪些表样式\n· 配置\n\n流程：选中矢量表 → 读取 → 识别 → 选样式 → 替换。",
           );
           break;
         case "config":
@@ -426,6 +474,7 @@ export function mountPanel(root: HTMLElement): void {
           addMessage("assistant", "已打开配置。改完点保存，再回来对话。");
           break;
         case "clear":
+          pending = null;
           chatLog.innerHTML = "";
           addMessage("assistant", "对话已清空。选中矢量表后，说「读取选区」开始。");
           break;
@@ -433,7 +482,7 @@ export function mountPanel(root: HTMLElement): void {
           const locked = getLockedSelection();
           addMessage(
             "assistant",
-            `运行时：${isInDesignRuntime() ? "InDesign" : "非宿主"}\n选区：${locked ? selectionSummary(locked.snapshot.selection) : "未锁定"}\n识别稿：${draft ? `${draft.rows.length} 行` : "无"}\n样式数：${tableStyles.length}`,
+            `运行时：${isInDesignRuntime() ? "InDesign" : "非宿主"}\n选区：${locked ? selectionSummary(locked.snapshot.selection) : "未锁定"}\n识别稿：${draft ? `${draft.rows.length} 行` : "无"}\n待确认：${pending ? pending.type : "无"}\n样式数：${tableStyles.length}`,
           );
           break;
         }
@@ -450,10 +499,10 @@ export function mountPanel(root: HTMLElement): void {
           await doLock();
           break;
         case "recognize":
-          await doRecognize(intent.note);
+          await requestRecognize(intent.note);
           break;
         case "replace":
-          await doReplace(intent.styleName);
+          await requestReplace(intent.styleName);
           break;
         case "unknown":
           addMessage(

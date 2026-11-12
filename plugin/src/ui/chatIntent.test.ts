@@ -14,4 +14,9 @@ describe("parseChatIntent", () => {
     assert.equal(intent.kind, "replace");
     if (intent.kind === "replace") assert.equal(intent.styleName, "正文表");
   });
+
+  it("parses confirm / cancel", () => {
+    assert.equal(parseChatIntent("确认").kind, "confirm");
+    assert.equal(parseChatIntent("取消").kind, "cancel");
+  });
 });
