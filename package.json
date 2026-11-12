@@ -1,6 +1,6 @@
 {
   "name": "indesign-ai-plugin",
-  "version": "0.3.7",
+  "version": "0.4.0",
   "private": true,
   "description": "InDesign UXP AI panel — layout assist and vector-table recovery",
   "type": "module",

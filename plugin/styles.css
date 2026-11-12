@@ -328,3 +328,121 @@ body {
   flex-direction: row;
   justify-content: flex-end;
 }
+
+/* —— Agent scene / gallery —— */
+.scene-bar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+  background-color: var(--bg-elev);
+  gap: 8px;
+}
+
+.scene-label {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scene-exit {
+  padding: 4px 10px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.recommend-bar {
+  flex-shrink: 0;
+  padding: 8px 12px 4px 12px;
+  border-top: 1px solid var(--line);
+  background-color: var(--bg);
+}
+
+.recommend-title {
+  margin: 0 0 6px 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.recommend-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.recommend-chip {
+  display: inline-block;
+  padding: 6px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r);
+  background-color: transparent;
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.recommend-chip.ghost {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.view-agents {
+  padding: 12px;
+  overflow: auto;
+}
+
+.agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-card {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background-color: var(--bg-elev);
+  cursor: pointer;
+}
+
+.agent-card.active {
+  border-color: var(--accent);
+}
+
+.agent-card-title {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.agent-card-tag {
+  margin: 0 0 6px 0;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.agent-card-desc {
+  margin: 0 0 10px 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.agent-card-go {
+  display: block;
+  width: 100%;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 12px;
+}

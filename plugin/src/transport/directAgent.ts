@@ -23,11 +23,12 @@ export async function directAgentTurn(
   payload: AgentTurnPayload,
 ): Promise<AgentDecision> {
   const adapter = getAdapter(settings.provider);
+  const agentId = payload.activeAgentId || "default";
   const raw = await adapter.chat(
     {
       op: "agent_turn",
       userNote: JSON.stringify({
-        system: buildAgentSystemPrompt(),
+        system: buildAgentSystemPrompt(agentId),
         user: buildAgentUserPayload(payload),
       }),
     },
