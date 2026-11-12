@@ -1,0 +1,31 @@
+{
+  "manifestVersion": 5,
+  "id": "com.tealun.indesign.ai",
+  "name": "InDesign AI",
+  "version": "0.2.0",
+  "main": "index.html",
+  "host": {
+    "app": "ID",
+    "minVersion": "19.0.0"
+  },
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "indesignAiPanel",
+      "label": {
+        "default": "InDesign AI"
+      },
+      "minimumSize": { "width": 280, "height": 360 },
+      "maximumSize": { "width": 800, "height": 2000 },
+      "preferredDockedSize": { "width": 320, "height": 640 },
+      "preferredFloatingSize": { "width": 360, "height": 720 }
+    }
+  ],
+  "requiredPermissions": {
+    "network": {
+      "domains": "all"
+    },
+    "localFileSystem": "request",
+    "clipboard": "readAndWrite"
+  }
+}

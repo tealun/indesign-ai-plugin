@@ -1,0 +1,169 @@
+/** Shared JSON protocol types — source of truth in docs/00_core/00_04_JSON_Protocol.md */
+
+export const PROTOCOL_VERSION = "0.1" as const;
+
+export type ProtocolOp =
+  | "analyze_and_plan"
+  | "apply_commands"
+  | "recover_table"
+  | "ping";
+
+export type Bounds = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  unit: "pt";
+};
+
+export type SelectionItem =
+  | {
+      id: string;
+      type: "textFrame";
+      storyText?: string;
+      appliedParaStyle?: string | null;
+      appliedCharStyle?: string | null;
+      fontFamily?: string;
+      fontSize?: number;
+      leading?: number;
+      alignment?: string;
+      bounds: Bounds;
+      spaceBefore?: number;
+      spaceAfter?: number;
+    }
+  | {
+      id: string;
+      type: "group";
+      bounds: Bounds;
+      childCount?: number;
+      notes?: string;
+    }
+  | {
+      id: string;
+      type: "graphic";
+      bounds: Bounds;
+    };
+
+export type DocumentSnapshot = {
+  documentName: string;
+  pageIndex: number;
+  selection: SelectionItem[];
+};
+
+export type ProtocolErrorCode =
+  | "PROVIDER_AUTH"
+  | "PROVIDER_TIMEOUT"
+  | "PROVIDER_HTTP"
+  | "PARSE_ERROR"
+  | "VALIDATION_ERROR"
+  | "EXECUTE_ERROR"
+  | "CANCELLED";
+
+export type ProtocolError = {
+  code: ProtocolErrorCode;
+  message: string;
+  details?: Record<string, unknown>;
+  retryable: boolean;
+};
+
+export type TableDraft = {
+  headerRowCount: number;
+  footerRowCount: number;
+  suggestedTableStyleName?: string;
+  rows: string[][];
+};
+
+export type LayoutCommand =
+  | { type: "setFontSize"; targetId: string; size: number }
+  | { type: "setLeading"; targetId: string; leading: number }
+  | { type: "setAlignment"; targetId: string; alignment: string }
+  | { type: "setSpaceBeforeAfter"; targetId: string; before?: number; after?: number }
+  | { type: "createParaStyle"; name: string; props: Record<string, unknown> }
+  | { type: "applyParaStyle"; targetId: string; name: string }
+  | { type: "createCharStyle"; name: string; props: Record<string, unknown> }
+  | { type: "applyCharStyle"; targetId: string; name: string }
+  | { type: "createTextFrame"; pageIndex: number; bounds: Bounds; text?: string }
+  | { type: "moveResizeFrame"; targetId: string; bounds: Bounds }
+  | {
+      type: "createTable";
+      parentFrameId: string;
+      bodyRowCount: number;
+      columnCount: number;
+      headerRowCount: number;
+      footerRowCount: number;
+    }
+  | { type: "writeCellText"; tableId: string; row: number; column: number; text: string }
+  | { type: "applyTableStyle"; tableId: string; name: string }
+  | { type: "removeObjects"; ids: string[] };
+
+export const M0_COMMAND_TYPES = [
+  "setFontSize",
+  "setLeading",
+  "setAlignment",
+  "setSpaceBeforeAfter",
+  "createParaStyle",
+  "applyParaStyle",
+  "createCharStyle",
+  "applyCharStyle",
+  "createTextFrame",
+  "moveResizeFrame",
+] as const;
+
+export const M0T_COMMAND_TYPES = [
+  "createTable",
+  "writeCellText",
+  "applyTableStyle",
+  "removeObjects",
+] as const;
+
+export const ALL_WHITELIST_TYPES = [
+  ...M0_COMMAND_TYPES,
+  ...M0T_COMMAND_TYPES,
+] as const;
+
+export type WhitelistType = (typeof ALL_WHITELIST_TYPES)[number];
+
+export type CommandResult = {
+  index: number;
+  type: string;
+  ok: boolean;
+  createdId?: string;
+  error?: ProtocolError;
+};
+
+export type ExecutionReport = {
+  requestId: string;
+  ok: boolean;
+  created?: {
+    frameId?: string;
+    tableId?: string;
+  };
+  results: CommandResult[];
+  stoppedAt?: number;
+  removeObjectsSkipped?: boolean;
+};
+
+export type ProviderType =
+  | "openai_compatible"
+  | "anthropic"
+  | "google_gemini"
+  | "custom_openai_compatible";
+
+export type ProviderSettings = {
+  provider: ProviderType;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  timeoutMs: number;
+  temperature: number;
+};
+
+export type ChatRequest = {
+  op: ProtocolOp;
+  locale?: string;
+  snapshot?: DocumentSnapshot;
+  styleProfile?: Record<string, unknown>;
+  /** data URL or opaque ref — never log full content by default */
+  imageDataUrl?: string;
+  userNote?: string;
+};
