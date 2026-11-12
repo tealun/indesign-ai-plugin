@@ -116,7 +116,9 @@ export async function listTableStyleNames(): Promise<string[]> {
     try {
       const s = styles.item(i);
       const name = String(s.name);
-      if (name && name !== "[No Table Style]") names.push(name);
+      if (name && name !== "[No Table Style]" && name !== "[无表样式]") {
+        names.push(name);
+      }
     } catch {
       /* skip */
     }

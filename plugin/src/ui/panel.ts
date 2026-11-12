@@ -8,7 +8,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.2.9";
+const PLUGIN_UI_VERSION = "0.2.10";
 
 function newId(): string {
   try {
@@ -42,6 +42,7 @@ import { preflightTableReplace } from "../m0t/preflight.js";
 import { validateTableDraft } from "../protocol/tableDraft.js";
 import { el } from "./dom.js";
 import { parseChatIntent } from "./chatIntent.js";
+import { matchTableStyleName } from "./matchStyle.js";
 
 type Role = "assistant" | "user" | "system";
 
@@ -74,8 +75,15 @@ export function mountPanel(root: HTMLElement): void {
   let draft: TableDraft | null = null;
   let tableStyles: string[] = [];
   let busy = false;
-  /** UXP has no window.confirm — only destructive replace asks in chat. */
-  let pending: null | { type: "replace"; styleName: string } = null;
+  /**
+   * UXP has no window.confirm.
+   * - replace: confirm destructive write
+   * - pickStyle: waiting for a style name after recognize/auto
+   */
+  let pending:
+    | null
+    | { type: "replace"; styleName: string }
+    | { type: "pickStyle" } = null;
 
   const chatLog = el("div", { className: "chat-log", id: "chatLog" });
   const composer = el("textarea", {
@@ -396,14 +404,53 @@ export function mountPanel(root: HTMLElement): void {
   }
 
   function resolveStyleName(preferred?: string): string | null {
-    const fromArg = (preferred || "").trim();
-    if (fromArg) return fromArg;
+    if (preferred) {
+      const matched = matchTableStyleName(preferred, tableStyles);
+      if (matched) return matched;
+      const raw = preferred.trim();
+      if (raw && tableStyles.includes(raw)) return raw;
+      // User typed a free name that may still exist after refresh
+      if (raw) return raw;
+    }
     const fromSelect = (styleSelect.value || "").trim();
     if (fromSelect) return fromSelect;
     const suggested = (draft?.suggestedTableStyleName || "").trim();
-    if (suggested && tableStyles.includes(suggested)) return suggested;
-    if (tableStyles.length === 1) return tableStyles[0]!;
+    if (suggested) {
+      const hit = matchTableStyleName(suggested, tableStyles);
+      if (hit) return hit;
+    }
+    const usable = tableStyles.filter(
+      (n) => n !== "[No Table Style]" && n !== "[无表样式]",
+    );
+    if (usable.length === 1) return usable[0]!;
     return null;
+  }
+
+  async function continueWithStyle(styleName: string): Promise<void> {
+    const name = resolveStyleName(styleName);
+    if (!name) {
+      addMessage("assistant", `没找到表样式「${styleName}」。可以说「有哪些表样式」。`);
+      return;
+    }
+    styleSelect.value = name;
+    if (!draft || !getLockedSelection()) {
+      addMessage("assistant", "当前没有可用的识别结果/选区，请再说「转成表格」。");
+      return;
+    }
+    const host = getHost();
+    const locked = getLockedSelection()!;
+    const pre = await preflightTableReplace({
+      draft,
+      tableStyleName: name,
+      locked,
+      host,
+    });
+    if (!pre.ok) {
+      addMessage("assistant", `预检未通过（未改文档）：${pre.error.message}`);
+      return;
+    }
+    addMessage("assistant", `已接上：用样式「${name}」写入真表（可 Undo）…`);
+    await runReplace(name);
   }
 
   async function requestReplace(styleName?: string): Promise<void> {
@@ -502,10 +549,11 @@ export function mountPanel(root: HTMLElement): void {
 
     const name = resolveStyleName(styleName);
     if (!name) {
+      pending = { type: "pickStyle" };
       addMessage(
         "assistant",
         tableStyles.length
-          ? `识别已完成，但还不知道用哪个表样式。请在下方选择，或说「用「样式名」替换」。\n可用：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`
+          ? `识别已完成，但还不知道用哪个表样式。\n直接回复样式名即可（例如：货号信息表），或在下方下拉框选择后再说「确认」。\n可用：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`
           : "识别已完成，但文档里没有可用表样式。请先在 InDesign 建好表样式。",
       );
       return;
@@ -538,10 +586,56 @@ export function mountPanel(root: HTMLElement): void {
     if (!text) return;
     addMessage("user", text);
     composer.value = "";
-    const intent = parseChatIntent(text);
+    let intent = parseChatIntent(text);
+    // Bare style name after recognize → continue replace (conversation continuity)
+    if (intent.kind === "unknown" || (intent.kind === "replace" && !intent.styleName)) {
+      const matched = matchTableStyleName(text, tableStyles);
+      if (matched) {
+        intent = { kind: "replace", styleName: matched };
+      }
+    }
     setBusy(true);
     try {
-      if (pending && intent.kind !== "confirm" && intent.kind !== "cancel") {
+      if (pending?.type === "pickStyle") {
+        if (intent.kind === "cancel") {
+          pending = null;
+          addMessage("system", "已取消选样式。");
+          return;
+        }
+        if (intent.kind === "confirm") {
+          const fromSelect = (styleSelect.value || "").trim();
+          if (!fromSelect) {
+            addMessage("assistant", "请先在下方选择表样式，或直接回复样式名。");
+            return;
+          }
+          pending = null;
+          await continueWithStyle(fromSelect);
+          return;
+        }
+        const styleFromIntent =
+          intent.kind === "replace"
+            ? intent.styleName
+            : intent.kind === "autoTable"
+              ? intent.styleName
+              : undefined;
+        const matched =
+          matchTableStyleName(text, tableStyles) ||
+          (styleFromIntent
+            ? matchTableStyleName(styleFromIntent, tableStyles)
+            : null);
+        if (!matched) {
+          addMessage(
+            "assistant",
+            `还在等表样式名。请直接回复例如「货号信息表」，或说「取消」。\n可用：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`,
+          );
+          return;
+        }
+        pending = null;
+        await continueWithStyle(matched);
+        return;
+      }
+
+      if (pending?.type === "replace" && intent.kind !== "confirm" && intent.kind !== "cancel") {
         addMessage(
           "assistant",
           "还有待确认的替换。请先回复「确认」或「取消」。",
@@ -551,15 +645,18 @@ export function mountPanel(root: HTMLElement): void {
 
       switch (intent.kind) {
         case "confirm":
-          if (!pending) {
-            addMessage("assistant", "当前没有待确认的操作。");
-            break;
-          }
-          {
+          if (pending?.type === "replace") {
             const job = pending;
             pending = null;
             await runReplace(job.styleName);
+            break;
           }
+          // Dropdown already chosen + draft ready → treat 确认 as continue
+          if (draft && (styleSelect.value || "").trim()) {
+            await continueWithStyle(styleSelect.value);
+            break;
+          }
+          addMessage("assistant", "当前没有待确认的操作。");
           break;
         case "cancel":
           if (!pending) {
@@ -611,12 +708,20 @@ export function mountPanel(root: HTMLElement): void {
           await doAutoTable(intent.styleName, intent.note);
           break;
         case "replace":
-          await requestReplace(intent.styleName);
+          if (draft && intent.styleName) {
+            await continueWithStyle(intent.styleName);
+          } else if (draft && (styleSelect.value || "").trim()) {
+            await continueWithStyle(styleSelect.value);
+          } else {
+            await requestReplace(intent.styleName);
+          }
           break;
         case "unknown":
           addMessage(
             "assistant",
-            "我还没听懂。可以说「转成表格」走全流程，或说「帮助」。",
+            draft
+              ? "已有识别结果。请直接回复表样式名（如「货号信息表」），或点「替换为真表」。"
+              : "我还没听懂。可以说「转成表格」走全流程，或说「帮助」。",
           );
           break;
       }
