@@ -1,6 +1,23 @@
 import { getAdapter } from "../providers/registry.js";
 import type { ChatRequest, ProviderSettings, TableDraft } from "../types/protocol.js";
 import type { LayoutCommand } from "../types/protocol.js";
+import { formatProviderHttpError } from "./providerError.js";
+
+function assertOk(
+  status: number,
+  text: string,
+  settings: ProviderSettings,
+  pathHint: string,
+): void {
+  if (status < 400) return;
+  throw formatProviderHttpError(status, text, settings, pathHint);
+}
+
+function pathHintFor(provider: ProviderSettings["provider"]): string {
+  if (provider === "anthropic") return "/v1/messages";
+  if (provider === "google_gemini") return "/:generateContent";
+  return "/chat/completions";
+}
 
 export async function directChatCommands(
   settings: ProviderSettings,
@@ -8,12 +25,7 @@ export async function directChatCommands(
 ): Promise<LayoutCommand[]> {
   const adapter = getAdapter(settings.provider);
   const raw = await adapter.chat(request, settings);
-  if (raw.status === 401 || raw.status === 403) {
-    throw new Error("PROVIDER_AUTH");
-  }
-  if (raw.status >= 400) {
-    throw new Error(`PROVIDER_HTTP:${raw.status}`);
-  }
+  assertOk(raw.status, raw.text, settings, pathHintFor(settings.provider));
   return adapter.parseLayoutCommands(raw);
 }
 
@@ -26,11 +38,6 @@ export async function directRecoverTable(
     throw new Error("provider does not support vision");
   }
   const raw = await adapter.chat({ ...request, op: "recover_table" }, settings);
-  if (raw.status === 401 || raw.status === 403) {
-    throw new Error("PROVIDER_AUTH");
-  }
-  if (raw.status >= 400) {
-    throw new Error(`PROVIDER_HTTP:${raw.status}`);
-  }
+  assertOk(raw.status, raw.text, settings, pathHintFor(settings.provider));
   return adapter.parseTableDraft(raw);
 }
