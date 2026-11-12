@@ -8,7 +8,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.3.2";
+const PLUGIN_UI_VERSION = "0.3.3";
 
 function newId(): string {
   try {
@@ -129,22 +129,55 @@ export function mountPanel(root: HTMLElement): void {
   }
 
   async function refreshStylesSilent(): Promise<void> {
+    const keep = (styleSelect.value || "").trim();
     try {
       if (!isInDesignRuntime()) {
         tableStyles = ["Catalog-Table"];
-        return;
+      } else {
+        tableStyles = await listTableStyleNames();
       }
-      tableStyles = await listTableStyleNames();
     } catch {
       tableStyles = [];
     }
     styleSelect.innerHTML = "";
-    if (tableStyles.length === 0) {
-      styleSelect.append(el("option", { value: "" }, ["（打开文档后可刷新样式）"]));
-      return;
-    }
+    styleSelect.append(
+      el("option", { value: "" }, [
+        tableStyles.length ? "（请选择表样式）" : "（打开文档后可刷新样式）",
+      ]),
+    );
     for (const name of tableStyles) {
       styleSelect.append(el("option", { value: name }, [name]));
+    }
+    if (keep && tableStyles.includes(keep)) {
+      styleSelect.value = keep;
+    }
+    updateStyleSelectHint();
+  }
+
+  function updateStyleSelectHint(): void {
+    const need = Boolean(draft) && !(styleSelect.value || "").trim();
+    styleSelect.classList.toggle("need", need);
+  }
+
+  /** After recognize: remind user; selecting the dropdown counts as chat feedback. */
+  function promptPickStyleAfterRecognize(): void {
+    updateStyleSelectHint();
+    const current = (styleSelect.value || "").trim();
+    if (current) {
+      addMessage(
+        "assistant",
+        `当前表样式是「${current}」。若要用它落地，点「替换为真表」；或在下方改选其它样式（改选会自动记入对话并继续）。`,
+      );
+      return;
+    }
+    addMessage(
+      "assistant",
+      "还差一步：请在下方「表样式」下拉框里选一个文档样式。\n选好后会自动当作你的回复并继续替换，不必再记口令。",
+    );
+    try {
+      styleSelect.focus();
+    } catch {
+      /* UXP focus may be limited */
     }
   }
 
@@ -403,17 +436,11 @@ export function mountPanel(root: HTMLElement): void {
       .slice(0, 8)
       .map((r) => r.join(" | "))
       .join("\n");
-    if (!opts?.quiet) {
-      addMessage(
-        "assistant",
-        `识别到 ${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列（表头 ${draft.headerRowCount} / 表尾 ${draft.footerRowCount}）。\n\n预览：\n${preview}${draft.rows.length > 8 ? "\n…" : ""}\n\n请选择表样式，然后说「替换为真表」；或直接说「转成表格」走全流程。`,
-      );
-    } else {
-      addMessage(
-        "assistant",
-        `识别完成：${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列。\n${preview}${draft.rows.length > 8 ? "\n…" : ""}`,
-      );
-    }
+    addMessage(
+      "assistant",
+      `识别完成：${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列（表头 ${draft.headerRowCount} / 表尾 ${draft.footerRowCount}）。\n${preview}${draft.rows.length > 8 ? "\n…" : ""}`,
+    );
+    promptPickStyleAfterRecognize();
     return true;
   }
 
@@ -501,6 +528,7 @@ export function mountPanel(root: HTMLElement): void {
     clearLockedSelection();
     imageDataUrl = "";
     draft = null;
+    updateStyleSelectHint();
     addMessage("assistant", `完成：已用样式「${styleName}」生成真表，原矢量已删除。`);
     const mem = loadMemory();
     recordTaskOutcome(
@@ -752,7 +780,7 @@ export function mountPanel(root: HTMLElement): void {
         );
         await executeAgentActions(actions);
       } else if (draft && /(替换|成真表)/.test(text) && !(styleSelect.value || "").trim()) {
-        addMessage("assistant", "识别稿已在。请先在下方选择表样式，再点「替换为真表」。");
+        promptPickStyleAfterRecognize();
       }
     } catch (e) {
       addMessage("assistant", `出错了：${String(e)}`);
@@ -764,6 +792,51 @@ export function mountPanel(root: HTMLElement): void {
       setBusy(false);
     }
   }
+
+  // Dropdown selection IS user feedback — mirror into chat and continue if draft ready.
+  styleSelect.addEventListener("change", () => {
+    updateStyleSelectHint();
+    const name = (styleSelect.value || "").trim();
+    if (!name) return;
+    if (busy) {
+      addMessage("system", `已记下表样式「${name}」（当前忙碌，完成后可再说替换）。`);
+      return;
+    }
+    if (draft) {
+      void handleUserText(
+        `我选择了表样式「${name}」。请用它把已识别的表格替换到当前锁定选区，不要重新识别。`,
+      );
+    } else {
+      addMessage("user", `我选择了表样式「${name}」。`);
+      history = [
+        ...history,
+        { role: "user" as const, text: `我选择了表样式「${name}」。` },
+        {
+          role: "assistant" as const,
+          text: `好的，已记录「${name}」。识别完成后会优先用它替换。`,
+        },
+      ].slice(-20);
+      chatByProject.set(activeProjectKey, history);
+      addMessage(
+        "assistant",
+        `好的，已记录「${name}」。识别完成后会优先用它替换。`,
+      );
+      const mem = loadMemory();
+      if (activeProjectKey && activeProjectKey !== "no-doc") {
+        rememberNote(mem, {
+          scope: "project",
+          projectKey: activeProjectKey,
+          text: `用户偏好表样式「${name}」`,
+          taskId: "m0t.replace_with_style",
+        });
+        const project = mem.projects[activeProjectKey];
+        if (project) {
+          project.preferredTableStyle = name;
+          saveMemory(mem);
+        }
+      }
+    }
+  });
 
   sendBtn.addEventListener("click", () => {
     if (sendBtn.classList.contains("ctl-disabled")) return;

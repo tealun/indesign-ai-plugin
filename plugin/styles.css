@@ -276,6 +276,11 @@ body {
   flex-shrink: 0;
 }
 
+.style-select.need {
+  border-color: var(--accent);
+  background-color: #2a2418;
+}
+
 .style-select {
   flex-grow: 1;
   min-width: 80px;
