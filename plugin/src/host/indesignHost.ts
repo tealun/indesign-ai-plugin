@@ -280,8 +280,17 @@ export function createIndesignHost(): DocumentHost {
             } catch {
               /* optional */
             }
+            try {
+              // Keep text from pushing the frame around
+              tf.textFramePreferences.verticalJustification =
+                (tryRequireIndesign() as any)?.VerticalJustification?.TOP_ALIGN ??
+                tf.textFramePreferences.verticalJustification;
+            } catch {
+              /* optional */
+            }
             if (command.text) tf.contents = command.text;
             ctx.created.frameId = String(tf.id);
+            ctx.created.frameBounds = { ...command.bounds };
             return { ok: true, createdId: String(tf.id) };
           }
           case "createTable": {
@@ -292,18 +301,14 @@ export function createIndesignHost(): DocumentHost {
                 errorMessage: `父文本框 ${command.parentFrameId} 不存在或不是 TextFrame`,
               };
             }
+            // Re-pin footprint before insert (position stability)
+            pinFrameBounds(frame, ctx.created.frameBounds);
             try {
               frame.contents = "";
             } catch {
               /* ignore */
             }
             const table = addTableAtFrame(frame, command);
-            const totalRows =
-              command.headerRowCount +
-              command.bodyRowCount +
-              command.footerRowCount;
-            fitFrameToTable(frame, table, totalRows, command.columnCount);
-            // Confirm the table is really parented in this frame
             try {
               if (!frame.tables || Number(frame.tables.length) < 1) {
                 return {
@@ -314,6 +319,9 @@ export function createIndesignHost(): DocumentHost {
             } catch {
               /* length check optional */
             }
+            // Equal columns inside the locked frame width — do not resize the frame here
+            equalizeColumnWidths(frame, table, command.columnCount);
+            pinFrameBounds(frame, ctx.created.frameBounds);
             ctx.created.tableId = String(table.id);
             return { ok: true, createdId: String(table.id) };
           }
@@ -343,6 +351,26 @@ export function createIndesignHost(): DocumentHost {
                 return { ok: false, errorMessage: `表样式不存在：${command.name}` };
               }
               table.appliedTableStyle = style;
+              try {
+                // Drop local overrides so doc table style fully owns look
+                if (typeof table.clearTableStyleOverrides === "function") {
+                  table.clearTableStyleOverrides(true);
+                }
+              } catch {
+                /* optional on some versions */
+              }
+              // After style (esp. second pass), keep frame on the intended footprint
+              if (ctx.created.frameId) {
+                const frame = resolveTextFrame(doc, ctx.created.frameId);
+                if (frame) {
+                  equalizeColumnWidths(
+                    frame,
+                    table,
+                    Number(table.columns?.length ?? 0) || 1,
+                  );
+                  pinFrameBounds(frame, ctx.created.frameBounds);
+                }
+              }
             } catch (e) {
               return {
                 ok: false,
@@ -504,40 +532,28 @@ function addTableAtFrame(
   throw new Error(`tables.add 未能在文本框内建表：${errors.join(" | ")}`);
 }
 
-function fitFrameToTable(
-  frame: any,
-  table: any,
-  rowCount: number,
-  columnCount: number,
-): void {
+function pinFrameBounds(frame: any, bounds: import("../types/protocol.js").Bounds | undefined): void {
+  if (!bounds) return;
+  try {
+    frame.geometricBounds = geometricFromBounds(bounds);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Split locked frame width evenly — never change frame x/y/w/h here. */
+function equalizeColumnWidths(frame: any, table: any, columnCount: number): void {
+  const cols = Math.max(1, columnCount);
   try {
     const gb = Array.from(frame.geometricBounds as number[]);
-    const top = Number(gb[0]);
-    const left = Number(gb[1]);
-    const bottom = Number(gb[2]);
-    const right = Number(gb[3]);
-    const minH = Math.max(bottom - top, rowCount * 18 + 12);
-    const minW = Math.max(right - left, columnCount * 42);
-    frame.geometricBounds = [top, left, top + minH, left + minW];
-  } catch {
-    /* optional */
-  }
-  try {
-    const width =
-      Number(frame.geometricBounds[3]) - Number(frame.geometricBounds[1]);
-    const colW = width / Math.max(1, columnCount);
-    for (let c = 0; c < columnCount; c++) {
+    const width = Number(gb[3]) - Number(gb[1]);
+    if (!(width > 0)) return;
+    const colW = width / cols;
+    for (let c = 0; c < cols; c++) {
       table.columns.item(c).width = colW;
     }
   } catch {
-    /* optional */
-  }
-  try {
-    for (let r = 0; r < table.rows.length; r++) {
-      table.rows.item(r).autoGrow = true;
-    }
-  } catch {
-    /* optional */
+    /* style may lock column widths */
   }
 }
 

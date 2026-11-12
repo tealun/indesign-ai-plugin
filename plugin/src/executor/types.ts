@@ -10,7 +10,12 @@ export interface DocumentHost {
 }
 
 export type ExecuteContext = {
-  created: { frameId?: string; tableId?: string };
+  created: {
+    frameId?: string;
+    tableId?: string;
+    /** Intended geometric footprint for the replacement frame (stable position). */
+    frameBounds?: import("../types/protocol.js").Bounds;
+  };
 };
 
 export type ExecuteStepResult = {

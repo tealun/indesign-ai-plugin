@@ -3,6 +3,15 @@ import { expandBoundsForTable } from "./expandBounds.js";
 import { validateTableDraft } from "./tableDraft.js";
 import type { ProtocolError } from "../types/protocol.js";
 
+/**
+ * Stable M0-T replace pipeline:
+ * 1) createTextFrame at selection footprint
+ * 2) createTable inside frame
+ * 3) applyTableStyle (structure/strokes from doc style first)
+ * 4) writeCellText…
+ * 5) applyTableStyle again (clear local overrides after fill)
+ * 6) removeObjects originals
+ */
 export function buildTableReplaceCommands(args: {
   pageIndex: number;
   bounds: Bounds;
@@ -41,6 +50,8 @@ export function buildTableReplaceCommands(args: {
     draft.rows.length,
     columnCount,
   );
+  const styleName = args.tableStyleName.trim();
+
   const commands: LayoutCommand[] = [
     {
       type: "createTextFrame",
@@ -54,6 +65,11 @@ export function buildTableReplaceCommands(args: {
       columnCount,
       headerRowCount: draft.headerRowCount,
       footerRowCount: draft.footerRowCount,
+    },
+    {
+      type: "applyTableStyle",
+      tableId: "$created.tableId",
+      name: styleName,
     },
   ];
 
@@ -70,10 +86,11 @@ export function buildTableReplaceCommands(args: {
     }
   }
 
+  // Second apply after fill — style wins over accidental local overrides.
   commands.push({
     type: "applyTableStyle",
     tableId: "$created.tableId",
-    name: args.tableStyleName,
+    name: styleName,
   });
   commands.push({
     type: "removeObjects",
