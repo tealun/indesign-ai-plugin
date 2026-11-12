@@ -12,9 +12,11 @@ InDesign AI 插件的权威文档入口。实现与改动前先读对应域的�
 | JSON command protocol | [`00_core/00_04_JSON_Protocol.md`](00_core/00_04_JSON_Protocol.md) |
 | Local setup | [`00_core/00_05_Setup_Guide.md`](00_core/00_05_Setup_Guide.md) |
 | M0 feature behavior | [`01_specs/01_01_M0_Selection_Layout.md`](01_specs/01_01_M0_Selection_Layout.md) |
+| M0-T vector table recovery | [`01_specs/01_02_M0T_Vector_Table_Recovery.md`](01_specs/01_02_M0T_Vector_Table_Recovery.md) |
 | Milestone gates | [`02_tasks/02_01_Milestones.md`](02_tasks/02_01_Milestones.md) |
 | Roadmap / deferred scope | [`88_planning/88_01_Roadmap.md`](88_planning/88_01_Roadmap.md) |
-| Planning readiness | [`99_audits/99_01_planning_readiness.md`](99_audits/99_01_planning_readiness.md) |
+| Planning readiness (M0) | [`99_audits/99_01_planning_readiness.md`](99_audits/99_01_planning_readiness.md) |
+| Planning readiness (M0-T) | [`99_audits/99_02_m0t_planning_readiness.md`](99_audits/99_02_m0t_planning_readiness.md) |
 | Decisions / assumptions | [`88_planning/88_02_Planning_Ledgers.md`](88_planning/88_02_Planning_Ledgers.md) |
 
 ## Maintenance Rules

@@ -20,9 +20,10 @@
 | --- | --- | --- |
 | `protocolVersion` | yes | M0 = `0.1` |
 | `requestId` | yes | 关联请求与 `ExecutionReport` |
-| `op` | yes | `analyze_and_plan` \| `apply_commands` \| `ping` |
+| `op` | yes | `analyze_and_plan` \| `apply_commands` \| `recover_table` \| `ping` |
 | `styleProfile` | no | M0 可空对象；后期扩展 |
-| `snapshot` | yes for analyze | 选区打包结果 |
+| `snapshot` | yes for analyze / recover | 选区打包结果 |
+| `image` | recover_table | 选区栅格（data URL 或实现约定的本地引用）；可与用户粘贴补图合并 |
 | `error` | response | 失败时非 null；成功为 null |
 
 ## DocumentSnapshot (selection pack)
@@ -70,6 +71,43 @@
 | `applyCharStyle` | `targetId`, `name` |
 | `createTextFrame` | `pageIndex`, `bounds`, `text?` |
 | `moveResizeFrame` | `targetId`, `bounds` |
+
+### LayoutCommand Whitelist (M0-T additions)
+
+| type | params (minimal) |
+| --- | --- |
+| `createTable` | `pageIndex`, `bounds`, `bodyRowCount`, `columnCount`, `headerRowCount`, `footerRowCount`, `replaceSelectionIds?` |
+| `writeCellText` | `tableId`, `row`, `column`, `text` |
+| `setHeaderFooterRowCount` | `tableId`, `headerRowCount`, `footerRowCount` |
+| `applyTableStyle` | `tableId`, `name`（必须是文档已有表样式） |
+| `removeObjects` | `ids[]`（用于移除原矢量伪表） |
+
+`createTable` 若带 `replaceSelectionIds`，executor 须在建表成功后删除这些对象；任一步失败则按 ExecutionReport 停止后续并暴露已执行项。
+
+### TableDraft (recover_table model output)
+
+```json
+{
+  "protocolVersion": "0.1",
+  "requestId": "uuid",
+  "tableDraft": {
+    "headerRowCount": 1,
+    "footerRowCount": 1,
+    "suggestedTableStyleName": "Catalog-Table",
+    "rows": [
+      ["品名", "规格", "数量"],
+      ["A", "10mm", "2"],
+      ["合计", "", "2"]
+    ],
+    "merges": []
+  },
+  "confidence": 0.86,
+  "warnings": [],
+  "error": null
+}
+```
+
+面板将 `TableDraft` 转为用户可编辑预览；用户确认后由面板（非模型）发出 `apply_commands` 批处理（`createTable` → `writeCellText`* → `setHeaderFooterRowCount` → `applyTableStyle` → `removeObjects`）。
 
 模型响应示例：
 

@@ -1,6 +1,29 @@
 # 02_01 Milestones & Gates
 
-## M0 — Selection apply + style assist (current)
+## M0-T — Vector table recovery (urgent spike, current priority)
+
+| Field | Value |
+| --- | --- |
+| Status | Ready for implementation after scaffolding shared panel/provider |
+| Owner | implementation agent + user verification on real catalog page |
+| Goal | 选中矢量伪表 → 视觉识别 → 预览确认 → 真表 + 已有表样式 + 表头/表尾行，并替换原对象 |
+| Evidence required | T1–T8 in [`01_02_M0T_Vector_Table_Recovery.md`](../01_specs/01_02_M0T_Vector_Table_Recovery.md) |
+| Done criteria | 画册样例页上伪表变为可编辑真表；头/尾行正确；指定已有 Table Style 套用成功；原矢量移除 |
+| Fail criteria | 无图纯路径识字；无预览直接写入；忽略已有表样式 |
+| Depends on | 面板设置、多模态供应商（vision）、选区导出图、协议校验、表命令 executor |
+| Docs to update on fact change | `00_04` `01_02` `88_02` `99_audits` |
+
+### M0-T implementation slices
+
+1. 选区 bounds + 栅格导出 + 面板缩略图
+2. `recover_table` 多模态请求（优先支持 vision 的供应商/中转）
+3. `TableDraft` 预览编辑（含表样式下拉 = 文档已有样式列表）
+4. 表白名单 executor：`createTable` / `writeCellText` / `setHeaderFooterRowCount` / `applyTableStyle` / `removeObjects`
+5. 粘贴补图兜底 + 错误路径手测
+
+> 与 M0 主线关系：M0-T **优先**交付紧急价值；共享脚手架（空面板、settings、openai_compatible+vision）先为 M0-T 服务，再补齐段/字符样式微调 AC。
+
+## M0 — Selection apply + style assist (parallel baseline)
 
 | Field | Value |
 | --- | --- |

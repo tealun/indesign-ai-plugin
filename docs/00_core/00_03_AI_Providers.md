@@ -56,6 +56,12 @@ interface ProviderAdapter {
 2. 切换到 Claude **或** Gemini（原生或兼容代理）完成同路径至少一次成功调用。
 3. 错误 Key / 错误 URL / 超时时面板展示分层错误，不改文档。
 
+## M0-T Vision Requirement
+
+`recover_table` 必须走**支持图像输入**的模型/中转。适配器需能把选区 PNG（及可选用户粘贴补图）与提示词一并发送，并解析 `TableDraft`。
+
+若某供应商无 vision，UI 在该模式下禁用或提示换模型；不得静默降级为无图请求。
+
 ## Prompt / Style Switching
 
 不使用多 Agent 进程。通过动态配置注入：

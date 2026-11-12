@@ -14,11 +14,12 @@
 
 ```text
 uxp-panel/
-  ui/                 # 主控面板 + 分步/折叠配置
+  ui/                 # 主控面板 + 分步/折叠配置（含表预览）
   selection/          # 选区与图层文本解析 → DocumentSnapshot
+  capture/            # 选区栅格导出（M0-T 视觉输入）
   protocol/           # JSON 编解码与校验
-  providers/          # 供应商适配器（OpenAI-compat / Claude / Gemini）
-  executor/           # 白名单指令执行 + 错误汇总
+  providers/          # 供应商适配器（OpenAI-compat / Claude / Gemini；含 vision）
+  executor/           # 白名单指令执行 + 错误汇总（含表命令）
   settings/           # 本机 provider/baseUrl/apiKey/model
 ```
 
