@@ -67,6 +67,7 @@ export type AgentExperienceSlice = {
 };
 
 export type AgentTurnPayload = {
+  activeAgentId?: string;
   project: AgentProjectRef | null;
   experience: AgentExperienceSlice;
   context: AgentRuntimeContext;

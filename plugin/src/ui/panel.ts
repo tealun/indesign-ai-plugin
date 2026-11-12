@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.3.7";
+const PLUGIN_UI_VERSION = "0.4.1";
 
 function newId(): string {
   try {
@@ -58,6 +58,13 @@ import {
   saveMemory,
 } from "../agent/memory/store.js";
 import { getActiveDocumentIdentity } from "../host/documentIdentity.js";
+import {
+  DEFAULT_AGENT_ID,
+  getAgent,
+  listSpecializedAgents,
+  NOOP_USAGE_METER,
+} from "../agent/catalog.js";
+import { recordAgentOpen, sortAgentsByUsage } from "../agent/usageStore.js";
 import { el } from "./dom.js";
 import { matchTableStyleName } from "./matchStyle.js";
 
@@ -104,13 +111,16 @@ export function mountPanel(root: HTMLElement): void {
   let activeProjectKey = "no-doc";
   let history: AgentChatMessage[] = [];
   let lastTaskId = "";
+  let activeAgentId = DEFAULT_AGENT_ID;
+  // Future: swap NOOP_USAGE_METER for a real points meter.
+  const usageMeter = NOOP_USAGE_METER;
 
   const chatLog = el("div", { className: "chat-log", id: "chatLog" });
   const composer = el("textarea", {
     id: "composer",
     className: "composer",
     rows: "2",
-    placeholder: "自然说即可，例如：把这个转成真表，用货号信息表…",
+    placeholder: getAgent(DEFAULT_AGENT_ID).ui.placeholder,
   }) as HTMLTextAreaElement;
   function addMessage(role: Role, text: string, extra?: HTMLElement): HTMLElement {
     const bubble = el("div", { className: `msg msg-${role}` }, [
@@ -261,11 +271,17 @@ export function mountPanel(root: HTMLElement): void {
 
   // —— Tabs (div, not button — UXP native buttons render broken) ——
   const tabChat = el("div", { className: "tab active", role: "button" }, ["对话"]);
+  const tabAgents = el("div", { className: "tab", role: "button" }, ["Agent"]);
   const tabConfig = el("div", { className: "tab", role: "button" }, ["配置"]);
-  const tabs = el("div", { className: "tabs" }, [tabChat, tabConfig]);
+  const tabs = el("div", { className: "tabs" }, [tabChat, tabAgents, tabConfig]);
 
   const chatView = el("section", { className: "view view-chat" });
+  const agentsView = el("section", { className: "view view-agents hidden" });
   const configView = el("section", { className: "view view-config hidden" });
+
+  const sceneBar = el("div", { className: "scene-bar hidden" });
+  const recommendBar = el("div", { className: "recommend-bar" });
+  const agentsList = el("div", { className: "agent-list" });
 
   // —— Config view ——
   const providerOptions = listProviders().map((p) =>
@@ -364,19 +380,7 @@ export function mountPanel(root: HTMLElement): void {
 
   // —— Chat chrome ——
   const styleSelect = el("select", { id: "tableStyle", className: "style-select" });
-  const chips = el("div", { className: "chips" }, [
-    chip("转成表格", () => void handleUserText("转成表格")),
-    chip("读取选区", () => void handleUserText("读取选区")),
-    chip("识别表格", () => void handleUserText("识别表格")),
-    chip("替换为真表", () => {
-      const style = (styleSelect.value || "").trim();
-      void handleUserText(
-        style
-          ? `把已识别好的表格文字，用表样式「${style}」直接替换到当前锁定选区。不要重新识别，不要从头执行。`
-          : "把已识别好的表格文字直接替换到当前锁定选区（用我选的/项目偏好表样式）。不要重新识别，不要从头执行。",
-      );
-    }),
-  ]);
+  const chips = el("div", { className: "chips" });
 
   const sendBtn = el("div", { className: "ctl ctl-primary send", role: "button" }, [
     "发送",
@@ -388,28 +392,39 @@ export function mountPanel(root: HTMLElement): void {
     className: "file-input",
   }) as HTMLInputElement;
 
+  const composerMeta = el("div", { className: "composer-meta" }, [
+    el("span", { className: "meta-label" }, ["表样式"]),
+    styleSelect,
+    el("label", { className: "file-label", for: "pasteFile" }, ["补图"]),
+    fileInput,
+  ]);
+
   const composerBar = el("div", { className: "composer-bar" }, [
-    el("div", { className: "composer-meta" }, [
-      el("span", { className: "meta-label" }, ["表样式"]),
-      styleSelect,
-      el("label", { className: "file-label", for: "pasteFile" }, ["补图"]),
-      fileInput,
-    ]),
+    composerMeta,
     composer,
     el("div", { className: "composer-actions" }, [sendBtn]),
   ]);
 
-  chatView.append(chatLog, chips, composerBar);
+  agentsView.append(
+    el("p", { className: "lede" }, [
+      "选择一个 Agent 后将回到对话首屏，并切换到该 Agent 的场景。以后可按需增加更多专属能力。",
+    ]),
+    agentsList,
+  );
+
+  chatView.append(sceneBar, chatLog, recommendBar, chips, composerBar);
+
+  const headerSub = el("p", { className: "sub" }, [
+    `对话顾问 · v${PLUGIN_UI_VERSION}`,
+  ]);
 
   root.append(
     el("header", { className: "top" }, [
-      el("div", {}, [
-        el("h1", {}, ["InDesign AI"]),
-        el("p", { className: "sub" }, [`对话顾问 · v${PLUGIN_UI_VERSION}`]),
-      ]),
+      el("div", {}, [el("h1", {}, ["InDesign AI"]), headerSub]),
       tabs,
     ]),
     chatView,
+    agentsView,
     configView,
   );
 
@@ -419,15 +434,154 @@ export function mountPanel(root: HTMLElement): void {
     return b;
   }
 
-  function switchTab(which: "chat" | "config"): void {
-    const chat = which === "chat";
-    tabChat.classList.toggle("active", chat);
-    tabConfig.classList.toggle("active", !chat);
-    chatView.classList.toggle("hidden", !chat);
-    configView.classList.toggle("hidden", chat);
+  function switchTab(which: "chat" | "agents" | "config"): void {
+    tabChat.classList.toggle("active", which === "chat");
+    tabAgents.classList.toggle("active", which === "agents");
+    tabConfig.classList.toggle("active", which === "config");
+    chatView.classList.toggle("hidden", which !== "chat");
+    agentsView.classList.toggle("hidden", which !== "agents");
+    configView.classList.toggle("hidden", which !== "config");
+  }
+
+  function renderSceneBar(): void {
+    sceneBar.innerHTML = "";
+    const agent = getAgent(activeAgentId);
+    if (!agent.specialized) {
+      sceneBar.classList.add("hidden");
+      return;
+    }
+    sceneBar.classList.remove("hidden");
+    sceneBar.append(
+      el("span", { className: "scene-label" }, [`场景：${agent.name}`]),
+      el("div", { className: "ctl scene-exit", role: "button", id: "exitAgent" }, [
+        "退出到默认",
+      ]),
+    );
+    sceneBar.querySelector("#exitAgent")?.addEventListener("click", () => {
+      activateAgent(DEFAULT_AGENT_ID, { announce: true });
+    });
+  }
+
+  function renderRecommendBar(): void {
+    recommendBar.innerHTML = "";
+    if (getAgent(activeAgentId).specialized) {
+      recommendBar.classList.add("hidden");
+      return;
+    }
+    recommendBar.classList.remove("hidden");
+    const sorted = sortAgentsByUsage(listSpecializedAgents());
+    recommendBar.append(
+      el("div", { className: "recommend-title" }, [
+        "需要专属能力时，可加载 Agent（或打开上方「Agent」列表）：",
+      ]),
+    );
+    const row = el("div", { className: "recommend-row" });
+    for (const a of sorted) {
+      const card = el("div", { className: "recommend-chip", role: "button" }, [
+        a.name,
+      ]);
+      card.addEventListener("click", () => activateAgent(a.id, { announce: true }));
+      row.append(card);
+    }
+    const more = el("div", { className: "recommend-chip ghost", role: "button" }, [
+      "全部…",
+    ]);
+    more.addEventListener("click", () => switchTab("agents"));
+    row.append(more);
+    recommendBar.append(row);
+  }
+
+  function renderAgentsList(): void {
+    agentsList.innerHTML = "";
+    const sorted = sortAgentsByUsage(listSpecializedAgents());
+    for (const a of sorted) {
+      const active = activeAgentId === a.id;
+      const card = el("div", { className: `agent-card${active ? " active" : ""}` }, [
+        el("div", { className: "agent-card-title" }, [a.name]),
+        el("div", { className: "agent-card-tag" }, [a.tagline]),
+        el("div", { className: "agent-card-desc" }, [a.description]),
+        el(
+          "div",
+          {
+            className: "ctl ctl-primary agent-card-go",
+            role: "button",
+          },
+          [active ? "已加载 · 回对话" : "加载并回对话"],
+        ),
+      ]);
+      card.addEventListener("click", () => {
+        activateAgent(a.id, { announce: true });
+      });
+      agentsList.append(card);
+    }
+    if (sorted.length === 0) {
+      agentsList.append(el("p", { className: "muted" }, ["暂无可用 Agent。"]));
+    }
+  }
+
+  function renderAgentChrome(): void {
+    const agent = getAgent(activeAgentId);
+    composer.placeholder = agent.ui.placeholder;
+    composerMeta.classList.toggle("hidden", !agent.ui.showTableTools);
+    chips.innerHTML = "";
+    if (agent.ui.chips.includes("recognize")) {
+      chips.append(
+        chip("识别表格", () => void handleUserText("识别表格")),
+      );
+    }
+    if (agent.ui.chips.includes("replace")) {
+      chips.append(
+        chip("替换为真表", () => {
+          const style = (styleSelect.value || "").trim();
+          void handleUserText(
+            style
+              ? `把已识别好的表格文字，用表样式「${style}」直接替换到当前锁定选区。不要重新识别，不要从头执行。`
+              : "把已识别好的表格文字直接替换到当前锁定选区（用我选的/项目偏好表样式）。不要重新识别，不要从头执行。",
+          );
+        }),
+      );
+    }
+    chips.classList.toggle("hidden", agent.ui.chips.length === 0);
+    headerSub.textContent = agent.specialized
+      ? `${agent.name} · v${PLUGIN_UI_VERSION}`
+      : `对话顾问 · v${PLUGIN_UI_VERSION}`;
+    renderSceneBar();
+    renderRecommendBar();
+    renderAgentsList();
+  }
+
+  function activateAgent(
+    id: string,
+    opts?: { announce?: boolean },
+  ): void {
+    const agent = getAgent(id);
+    activeAgentId = agent.id;
+    if (agent.specialized) {
+      recordAgentOpen(agent.id);
+      usageMeter.recordSpend?.(agent.id, 0);
+    }
+    renderAgentChrome();
+    switchTab("chat");
+    if (opts?.announce) {
+      if (agent.specialized) {
+        addMessage(
+          "assistant",
+          `已进入「${agent.name}」场景。${agent.description}\n直接用自然语言说明即可；需要换 Agent 时打开上方「Agent」或点「退出到默认」。`,
+        );
+      } else {
+        addMessage(
+          "assistant",
+          "已回到默认顾问。版面专属任务请到「Agent」列表加载。",
+        );
+      }
+    }
   }
 
   tabChat.addEventListener("click", () => switchTab("chat"));
+  tabAgents.addEventListener("click", () => {
+    renderAgentsList();
+    switchTab("agents");
+  });
   tabConfig.addEventListener("click", () => switchTab("config"));
 
   configView.querySelector("#saveConfig")?.addEventListener("click", () => {
@@ -741,6 +895,21 @@ export function mountPanel(root: HTMLElement): void {
     return next;
   }
 
+  function filterActionsForAgent(actions: AgentAction[]): AgentAction[] {
+    const allowed = new Set(getAgent(activeAgentId).allowedActions);
+    const next = actions.filter((a) => allowed.has(a.type));
+    if (next.length !== actions.length) {
+      addMessage(
+        "system",
+        `已忽略当前 Agent 不允许的动作（${actions
+          .filter((a) => !allowed.has(a.type))
+          .map((a) => a.type)
+          .join(", ")}）。`,
+      );
+    }
+    return next;
+  }
+
   async function executeAgentActions(actions: AgentAction[]): Promise<void> {
     for (const action of actions) {
       switch (action.type) {
@@ -832,6 +1001,11 @@ export function mountPanel(root: HTMLElement): void {
     }
     const s = ready.settings;
 
+    if (usageMeter.canSpend && !usageMeter.canSpend(activeAgentId, 1)) {
+      addMessage("assistant", "用量不足（预留控量钩子，当前未启用）。");
+      return;
+    }
+
     setBusy(true);
     try {
       await refreshStylesSilent();
@@ -846,8 +1020,12 @@ export function mountPanel(root: HTMLElement): void {
         saveMemory(mem);
       }
       const experience = memorySliceForPrompt(mem, id?.key ?? null);
-      // Prefer project style in UI when empty
-      if (!styleSelect.value && experience.projectPreferredTableStyle) {
+      // Prefer project style in UI when empty (only meaningful in table agent)
+      if (
+        getAgent(activeAgentId).ui.showTableTools &&
+        !styleSelect.value &&
+        experience.projectPreferredTableStyle
+      ) {
         const hit = matchTableStyleName(
           experience.projectPreferredTableStyle,
           tableStyles,
@@ -855,8 +1033,12 @@ export function mountPanel(root: HTMLElement): void {
         if (hit) styleSelect.value = hit;
       }
 
-      addMessage("system", "顾问正在结合项目经验与上下文理解…");
+      addMessage(
+        "system",
+        `「${getAgent(activeAgentId).name}」正在结合上下文理解…`,
+      );
       const decision = await directAgentTurn(s, {
+        activeAgentId,
         project: id
           ? {
               key: id.key,
@@ -869,6 +1051,7 @@ export function mountPanel(root: HTMLElement): void {
         history,
         userMessage: text,
       });
+      usageMeter.recordSpend?.(activeAgentId, 1);
       lastTaskId = decision.taskId || "";
       history = [
         ...history,
@@ -896,14 +1079,22 @@ export function mountPanel(root: HTMLElement): void {
         addMessage("system", `已沉淀 ${decision.lessons.length} 条经验。`);
       }
 
-      const actions = sanitizeActionsForReplace(decision.actions, text);
+      let actions = filterActionsForAgent(decision.actions);
+      if (getAgent(activeAgentId).ui.showTableTools) {
+        actions = sanitizeActionsForReplace(actions, text);
+      }
       if (actions.length) {
         addMessage(
           "system",
           `执行：${actions.map((a) => a.type).join(" → ")}`,
         );
         await executeAgentActions(actions);
-      } else if (draft && /(替换|成真表)/.test(text) && !(styleSelect.value || "").trim()) {
+      } else if (
+        getAgent(activeAgentId).ui.showTableTools &&
+        draft &&
+        /(替换|成真表)/.test(text) &&
+        !(styleSelect.value || "").trim()
+      ) {
         promptPickStyleAfterRecognize();
       }
     } catch (e) {
@@ -917,8 +1108,9 @@ export function mountPanel(root: HTMLElement): void {
     }
   }
 
-  // Dropdown selection IS user feedback — mirror into chat and continue if draft ready.
+  // Dropdown selection IS user feedback — only in table-recover agent.
   styleSelect.addEventListener("change", () => {
+    if (!getAgent(activeAgentId).ui.showTableTools) return;
     updateStyleSelectHint();
     const name = (styleSelect.value || "").trim();
     if (!name) return;
@@ -976,10 +1168,11 @@ export function mountPanel(root: HTMLElement): void {
 
   void refreshStylesSilent();
   syncProjectScope();
+  renderAgentChrome();
   addMessage(
     "assistant",
     isInDesignRuntime()
-      ? "你好。我按「打开的文档」隔离项目经验：识别任务 → 执行已实现的程序化步骤，并沉淀 agent/用户/项目/任务经验。直接说你想做什么即可。模型在「配置」。"
-      : "当前不在 InDesign 面板环境。连上宿主后即可处理真表替换。",
+      ? "你好。这里是默认对话：直接说需求即可。\n若要做「伪表/图表 → 真表」，请点下方推荐或打开「Agent」列表加载「伪表恢复」。模型在「配置」。"
+      : "当前不在 InDesign 面板环境。连上宿主后即可使用。",
   );
 }
