@@ -3,7 +3,7 @@ import { loadSettings, maskApiKey, saveSettings } from "../settings/store.js";
 import type { ProviderSettings, ProviderType, TableDraft } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.2.5";
+const PLUGIN_UI_VERSION = "0.2.6";
 
 function newId(): string {
   try {

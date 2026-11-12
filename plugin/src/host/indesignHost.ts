@@ -3,6 +3,7 @@ import type { Bounds, DocumentSnapshot, LayoutCommand, SelectionItem } from "../
 import { boundsFromGeometric, geometricFromBounds } from "./geometry.js";
 import { tryRequireIndesign, tryRequireUxp } from "./uxpRequire.js";
 import { CAPTURE_MAX_EDGE, CAPTURE_TARGET_PPI } from "../capture/limits.js";
+import { readPngSize } from "../capture/pngSize.js";
 import { withTimeout } from "../util/timeout.js";
 
 function getApp(): any {
@@ -133,48 +134,31 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-async function maybeDownscaleDataUrl(
-  dataUrl: string,
-  maxEdge: number,
+/**
+ * InDesign UXP: skip canvas/Image downscale — DOM Image with data: URLs frequently
+ * never fires onload. Ship the exported PNG as-is (resolution already capped via PPI).
+ */
+async function finalizeExportedPng(
+  buffer: ArrayBuffer,
 ): Promise<{ dataUrl: string; width: number; height: number; scaled: boolean; warnings: string[] }> {
   const warnings: string[] = [];
-  if (typeof Image === "undefined" || typeof document === "undefined") {
+  const size = readPngSize(buffer);
+  const dataUrl = `data:image/png;base64,${arrayBufferToBase64(buffer)}`;
+  if (!size) {
+    warnings.push("无法从 PNG 头读取尺寸，仍将原图送模型");
     return { dataUrl, width: 0, height: 0, scaled: false, warnings };
   }
-  const img = new Image();
-  await withTimeout(
-    new Promise<void>((resolve, reject) => {
-      img.onload = () => resolve();
-      img.onerror = () => reject(new Error("无法解码导出的 PNG"));
-      img.src = dataUrl;
-    }),
-    15_000,
-    "解码导出 PNG",
-  );
-  const w = img.naturalWidth || img.width;
-  const h = img.naturalHeight || img.height;
-  const edge = Math.max(w, h);
-  if (edge <= maxEdge) {
-    return { dataUrl, width: w, height: h, scaled: false, warnings };
+  const edge = Math.max(size.width, size.height);
+  if (edge > CAPTURE_MAX_EDGE) {
+    warnings.push(
+      `导出图 ${size.width}×${size.height} 超过 ${CAPTURE_MAX_EDGE}px；UXP 无法安全缩放，已原样发送。可在文档里缩小选区或降低导出分辨率。`,
+    );
   }
-  const scale = maxEdge / edge;
-  const nw = Math.max(1, Math.round(w * scale));
-  const nh = Math.max(1, Math.round(h * scale));
-  const canvas = document.createElement("canvas");
-  canvas.width = nw;
-  canvas.height = nh;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    warnings.push("canvas 不可用，使用原图");
-    return { dataUrl, width: w, height: h, scaled: false, warnings };
-  }
-  ctx.drawImage(img, 0, 0, nw, nh);
-  warnings.push(`图像已缩放至最长边 ${maxEdge}px`);
   return {
-    dataUrl: canvas.toDataURL("image/png"),
-    width: nw,
-    height: nh,
-    scaled: true,
+    dataUrl,
+    width: size.width,
+    height: size.height,
+    scaled: false,
     warnings,
   };
 }
@@ -238,8 +222,7 @@ export async function exportSelectionToPngDataUrl(selectionIds: string[]): Promi
     binary instanceof ArrayBuffer
       ? binary
       : (binary as { buffer: ArrayBuffer }).buffer ?? new Uint8Array(binary as ArrayLike<number>).buffer;
-  const dataUrl = `data:image/png;base64,${arrayBufferToBase64(buffer)}`;
-  return withTimeout(maybeDownscaleDataUrl(dataUrl, CAPTURE_MAX_EDGE), 20_000, "缩放选区图");
+  return finalizeExportedPng(buffer);
 }
 
 function resolvePage(doc: any, pageIndex: number): any {
