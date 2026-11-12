@@ -6,7 +6,9 @@ export type AgentActionType =
   | "recognize_table"
   | "replace_table"
   | "list_styles"
-  | "open_config";
+  | "open_config"
+  | "apply_table_style"
+  | "propose_grep";
 
 export type AgentAction =
   | { type: "none" }
@@ -14,7 +16,15 @@ export type AgentAction =
   | { type: "recognize_table" }
   | { type: "replace_table"; styleName: string }
   | { type: "list_styles" }
-  | { type: "open_config" };
+  | { type: "open_config" }
+  | { type: "apply_table_style"; styleName: string }
+  | {
+      type: "propose_grep";
+      find: string;
+      changeTo?: string;
+      flags?: string;
+      note?: string;
+    };
 
 export type AgentLessonDraft = {
   scope: ExperienceScope;
@@ -41,6 +51,8 @@ export type AgentChatMessage = {
 export type AgentRuntimeContext = {
   selectionLocked: boolean;
   selectionSummary: string;
+  /** Concatenated story/cell text from locked or live selection (truncated). */
+  selectionText: string;
   hasDraft: boolean;
   /** True when draft exists — replace must NOT re-run vision. */
   readyToReplace: boolean;
@@ -82,4 +94,6 @@ export const AGENT_ACTION_TYPES: AgentActionType[] = [
   "replace_table",
   "list_styles",
   "open_config",
+  "apply_table_style",
+  "propose_grep",
 ];

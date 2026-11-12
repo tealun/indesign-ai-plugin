@@ -1,6 +1,6 @@
 # 88_02 Planning Ledgers
 
-Updated: 2026-11-12 after user confirmation of M0-T urgent spike.
+Updated: 2026-11-13 — Agent 目录扩展（比对 / 校对 / GREP / 贴表规范化）；明确不做溢出与缺图。
 
 ## Decisions
 
@@ -9,11 +9,13 @@ Updated: 2026-11-12 after user confirmation of M0-T urgent spike.
 - M0-T 交互：选中矢量组 + 自动导出选区图给视觉模型；预览确认后替换；识别不准可粘贴补图。
 - M0 可演示结果（基线）：选区微调（原选项 C）+ 段/字符样式创建与套用；排期上让位于 M0-T 共享脚手架之后。
 - 宿主：InDesign；兼容基线 **2024+**；主测可用最新 CC。
-- UI：UXP 常驻面板；主控 + 分步/折叠配置。
+- UI：UXP 常驻面板；主控 + 分步/折叠配置；**Agent 列表点选回对话首屏**。
 - 通信：M0 面板直连 API；后期统一后端；布局指令 JSON 协议稳定。
-- 供应商：必须可配 Base URL / API Key / Model；内置 OpenAI 兼容（含中转、DeepSeek）、Claude、Gemini。
-- M0 命令白名单已锁定（见 `00_04`）。
-- 非目标：全书重排、M0 知识库、M0 印前全局校对、单风格独立 Agent。
+- 供应商：必须可配 Base URL / API Key / Model；内置 OpenAI 兼容（含中转、DeepSeek）、Claude、Gemini；本期仅 BYOK。
+- M0 命令白名单已锁定（见 `00_04`）；Agent 动作另见 `00_08`。
+- **专属 Agent（本期）**：伪表恢复、贴表规范化、文稿比对、文章校对、GREP 助手 — 权威表 `00_08`。
+- **明确不做**：溢出巡检 Agent、缺图/批量重链 Agent（既有软件已有提醒）。
+- 非目标：全书重排、M0 知识库、全书印前全局校对、每视觉风格独立 Agent 进程。
 - 产品重心：版式评估与优化（评估主能力放 M1，M0 先安全执行闭环）。
 
 ## Assumptions

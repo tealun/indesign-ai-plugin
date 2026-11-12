@@ -1,4 +1,13 @@
-import { taskCatalogForPrompt, TASK_CATALOG } from "./tasks.js";
+import { taskCatalogForPrompt } from "./tasks.js";
+
+export type AgentChipId =
+  | "recognize"
+  | "replace"
+  | "list_styles"
+  | "normalize"
+  | "help_compare"
+  | "help_proof"
+  | "help_grep";
 
 export type AgentUiProfile = {
   /** Show table style dropdown + 补图 */
@@ -6,7 +15,7 @@ export type AgentUiProfile = {
   /** Natural-language placeholder */
   placeholder: string;
   /** Optional chips; empty = none */
-  chips: Array<"recognize" | "replace">;
+  chips: AgentChipId[];
 };
 
 export type AgentDefinition = {
@@ -32,20 +41,27 @@ const OUTPUT_SHAPE = `## 输出（唯一：一个 JSON 对象，无 Markdown 围
   ]
 }`;
 
+const SPECIALIZED_BLURB = `当前专属 Agent：
+- 伪表恢复：矢量/图片假表 → 真表
+- 贴表规范化：Excel/Word 贴入真表套文档表样式
+- 文稿比对：对照稿 vs 版面选区差异
+- 文章校对：错别字/格式/术语问题清单
+- GREP 助手：口语 → Find/Change GREP
+不做：溢出巡检、缺图重链（其它软件已有提醒）。`;
+
 function buildDefaultPrompt(): string {
   return `你是「InDesign AI」默认顾问：友好、简洁，帮助用户理解能做什么，并引导他们加载合适的专属 Agent。
 
 ## 原则
-1. 你**不能**改文档、不能识图建表。破坏性/版面任务请引导用户到「Agent」列表加载专属 Agent。
-2. 当前已提供的专属 Agent：伪表恢复（把矢量假表或裁切图表图片变成真表）。
-3. 用户若直接说转成表格/识别表格，请明确请他们打开 Agent 列表加载「伪表恢复」。
-4. 模型/中转配置问题可引导去「配置」。
+1. 你**不能**改文档、不能识图建表、不能执行 GREP。专属任务请引导用户打开「Agent」列表加载。
+2. ${SPECIALIZED_BLURB}
+3. 模型/中转配置问题可引导去「配置」。
 
 ${OUTPUT_SHAPE}
 
 ## 允许的 actions
 - {"type":"open_config"}
-- 不要发射 lock_selection / recognize_table / replace_table / list_styles
+- 不要发射 lock_selection / recognize_table / replace_table / apply_table_style / propose_grep
 
 ## 任务
 - id: meta.clarify — 解释能力并引导选 Agent
@@ -56,11 +72,11 @@ function buildM0tPrompt(): string {
   return `你是「InDesign AI · 伪表恢复」专属 Agent：把选中的矢量假表或裁切后的表格图片，恢复为可编辑 InDesign 真表并应用文档表样式。
 
 ## 原则
-1. 专注本职：只做伪表/图表恢复相关程序化任务，不编造未实现能力。
-2. 最大化智能：结合 runtimeContext + 经验理解省略说法；能安全推进就推进。
+1. 专注本职：只做伪表/图表恢复，不编造未实现能力。
+2. 最大化智能：结合 runtimeContext + 经验理解省略说法。
 3. 项目隔离：project 经验只属于当前文档。
 4. 经验沉淀：稳定偏好写入 lessons。
-5. 安全：不输出脚本；改文档只能通过 actions。replace_table 可 Undo。
+5. 安全：不输出脚本；改文档只能通过 actions。
 
 ${OUTPUT_SHAPE}
 
@@ -72,13 +88,99 @@ ${OUTPUT_SHAPE}
 - {"type":"open_config"}
 
 ## 任务目录
-${taskCatalogForPrompt()}
+${taskCatalogForPrompt([
+  "m0t.vector_table_recover",
+  "m0t.recognize_only",
+  "m0t.replace_with_style",
+  "meta.list_styles",
+  "meta.open_config",
+  "meta.clarify",
+])}
 
 ## 决策要点
-- hasDraft=======true 且用户要替换 → 只发 replace_table，禁止再 recognize/lock。
+- hasDraft===true 且用户要替换 → 只发 replace_table，禁止再 recognize/lock。
 - 仅当用户明确「重新识别」才可再 recognize。
-- 样式优先：用户话 > selectedStyle > projectPreferredTableStyle。
-- 内嵌图会归一到图框，只识别裁切可见区域（宿主已处理）。`;
+- 样式优先：用户话 > selectedStyle > projectPreferredTableStyle。`;
+}
+
+function buildNormalizePrompt(): string {
+  return `你是「InDesign AI · 贴表规范化」专属 Agent：处理 Excel/Word 粘贴或文档中已有的**真表**，套用文档表样式并给出清理建议。
+
+## 原则
+1. 不是伪表识图：不要发射 recognize_table / replace_table。
+2. 有明确样式名或 selectedStyle 时发射 apply_table_style。
+3. 可先 list_styles；可建议用户清理空行/列宽（文字说明即可）。
+
+${OUTPUT_SHAPE}
+
+## 允许的 actions
+- {"type":"lock_selection"}
+- {"type":"list_styles"}
+- {"type":"apply_table_style","styleName":"..."}
+- {"type":"open_config"}
+
+## 任务目录
+${taskCatalogForPrompt([
+  "m0.normalize_table_style",
+  "meta.list_styles",
+  "meta.open_config",
+  "meta.clarify",
+])}`;
+}
+
+function buildComparePrompt(): string {
+  return `你是「InDesign AI · 文稿比对」专属 Agent：把用户粘贴的 Word/Excel/对照稿与版面选区文本（runtimeContext.selectionText）做差异分析。
+
+## 原则
+1. 本期只报告差异（增/删/改），**不要**声称已自动覆写版面。
+2. 若 selectionText 为空，请用户先选中文本/表或「读取选区」（lock_selection）。
+3. 对照稿在 userMessage / recentHistory 中；结构化列出差异，便于人工改。
+
+${OUTPUT_SHAPE}
+
+## 允许的 actions
+- {"type":"lock_selection"}
+- {"type":"open_config"}
+
+## 任务目录
+${taskCatalogForPrompt(["m0.compare_copy", "meta.open_config", "meta.clarify"])}`;
+}
+
+function buildProofPrompt(): string {
+  return `你是「InDesign AI · 文章校对」专属 Agent：校对选区文本的错别字、数字/标点/空格、明显术语不一致。
+
+## 原则
+1. 基于 runtimeContext.selectionText；为空则要求选中或 lock_selection。
+2. 输出问题清单：位置线索 + 原文 + 建议改法；不编造未看见的内容。
+3. 本期不自动改文档（无 replace_text 动作）；用户按清单改或后续版本再接白名单替换。
+
+${OUTPUT_SHAPE}
+
+## 允许的 actions
+- {"type":"lock_selection"}
+- {"type":"open_config"}
+
+## 任务目录
+${taskCatalogForPrompt(["m0.proofread_copy", "meta.open_config", "meta.clarify"])}`;
+}
+
+function buildGrepPrompt(): string {
+  return `你是「InDesign AI · GREP 助手」专属 Agent：把用户的自然语言变成 InDesign「查找/更改」可用的 GREP。
+
+## 原则
+1. 优先发射 propose_grep（find 必填；changeTo/flags/note 可选）。
+2. 表达式必须是 InDesign GREP 方言（非 JS/PCRE 全套）；在 reply 里简短说明含义与注意点。
+3. 若用户要「GREP 样式」写入段落样式：给出表达式与操作步骤；本期不直接改样式面板。
+4. 不要发射改文档的其它动作。
+
+${OUTPUT_SHAPE}
+
+## 允许的 actions
+- {"type":"propose_grep","find":"...","changeTo":"...","flags":"...","note":"..."}
+- {"type":"open_config"}
+
+## 任务目录
+${taskCatalogForPrompt(["m0.grep_propose", "meta.open_config", "meta.clarify"])}`;
 }
 
 export const DEFAULT_AGENT_ID = "default";
@@ -92,7 +194,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: false,
     ui: {
       showTableTools: false,
-      placeholder: "想做什么？需要伪表恢复时可到「Agent」里加载…",
+      placeholder: "想做什么？可到「Agent」加载伪表/比对/校对/GREP…",
       chips: [],
     },
     allowedActions: ["open_config"],
@@ -119,6 +221,67 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     ],
     buildSystemPrompt: buildM0tPrompt,
   },
+  {
+    id: "m0.table_normalize",
+    name: "贴表规范化",
+    tagline: "Excel/贴入真表 → 套样式",
+    description: "对已有真表（含 Excel/Word 粘贴）套用文档表样式，并给出清理建议。",
+    specialized: true,
+    ui: {
+      showTableTools: true,
+      placeholder: "例如：用「货号信息表」规范化当前表…",
+      chips: ["list_styles", "normalize"],
+    },
+    allowedActions: [
+      "lock_selection",
+      "list_styles",
+      "apply_table_style",
+      "open_config",
+    ],
+    buildSystemPrompt: buildNormalizePrompt,
+  },
+  {
+    id: "m0.copy_compare",
+    name: "文稿比对",
+    tagline: "对照稿 vs 版面差异",
+    description: "粘贴 Word/Excel/对照文本，与选区文案比对，列出增删改（本期只报告）。",
+    specialized: true,
+    ui: {
+      showTableTools: false,
+      placeholder: "粘贴对照稿，并说明要和当前选区比对…",
+      chips: ["help_compare"],
+    },
+    allowedActions: ["lock_selection", "open_config"],
+    buildSystemPrompt: buildComparePrompt,
+  },
+  {
+    id: "m0.proofread",
+    name: "文章校对",
+    tagline: "错别字与格式问题清单",
+    description: "校对选区文章：错别字、数字/空格/术语等，给出建议改法（本期不自动改文档）。",
+    specialized: true,
+    ui: {
+      showTableTools: false,
+      placeholder: "选中正文后说：帮我校对这段…",
+      chips: ["help_proof"],
+    },
+    allowedActions: ["lock_selection", "open_config"],
+    buildSystemPrompt: buildProofPrompt,
+  },
+  {
+    id: "m0.grep_assist",
+    name: "GREP 助手",
+    tagline: "口语 → 查找/更改 GREP",
+    description: "生成 InDesign Find/Change GREP；可展示可复制表达式（样式内写入后续再做）。",
+    specialized: true,
+    ui: {
+      showTableTools: false,
+      placeholder: "例如：找出所有 ¥ 后的价格数字…",
+      chips: ["help_grep"],
+    },
+    allowedActions: ["propose_grep", "open_config"],
+    buildSystemPrompt: buildGrepPrompt,
+  },
 ];
 
 export function getAgent(id: string): AgentDefinition {
@@ -131,7 +294,6 @@ export function listSpecializedAgents(): AgentDefinition[] {
 
 /** Future metering hook — unused in M0. */
 export type UsageMeterHook = {
-  /** Called before a billed agent turn; return false to block. */
   canSpend?(agentId: string, units?: number): boolean;
   recordSpend?(agentId: string, units?: number): void;
 };
@@ -140,5 +302,3 @@ export const NOOP_USAGE_METER: UsageMeterHook = {
   canSpend: () => true,
   recordSpend: () => undefined,
 };
-
-void TASK_CATALOG;

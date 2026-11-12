@@ -44,5 +44,23 @@ describe("parseAgentDecision", () => {
     assert.equal(d.taskId, "m0t.replace_with_style");
     assert.equal(d.lessons?.[0]?.scope, "project");
   });
+
+  it("parses propose_grep and apply_table_style", () => {
+    const d = parseAgentDecision(
+      JSON.stringify({
+        reply: "已生成",
+        actions: [
+          { type: "propose_grep", find: "\\s{2,}", changeTo: " ", note: "连续空格" },
+          { type: "apply_table_style", styleName: "[货号信息表]" },
+        ],
+      }),
+    );
+    assert.equal(d.actions[0]?.type, "propose_grep");
+    if (d.actions[0]?.type === "propose_grep") {
+      assert.equal(d.actions[0].find, "\\s{2,}");
+      assert.equal(d.actions[0].changeTo, " ");
+    }
+    assert.equal(d.actions[1]?.type, "apply_table_style");
+  });
 });
 

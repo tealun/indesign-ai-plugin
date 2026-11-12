@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.1";
+const PLUGIN_UI_VERSION = "0.4.2";
 
 function newId(): string {
   try {
@@ -38,6 +38,7 @@ import {
   selectionSummary,
 } from "../host/session.js";
 import {
+  applyTableStyleToSelection,
   createIndesignHost,
   listTableStyleNames,
   unionBounds,
@@ -541,6 +542,40 @@ export function mountPanel(root: HTMLElement): void {
         }),
       );
     }
+    if (agent.ui.chips.includes("list_styles")) {
+      chips.append(chip("列出表样式", () => void handleUserText("有哪些表样式")));
+    }
+    if (agent.ui.chips.includes("normalize")) {
+      chips.append(
+        chip("规范化当前表", () => {
+          const style = (styleSelect.value || "").trim();
+          void handleUserText(
+            style
+              ? `请用表样式「${style}」规范化当前选中的真表。`
+              : "请规范化当前选中的真表（用我选的或项目偏好表样式）。",
+          );
+        }),
+      );
+    }
+    if (agent.ui.chips.includes("help_compare")) {
+      chips.append(
+        chip("怎么比对", () =>
+          void handleUserText("请说明如何粘贴对照稿并与当前选区比对。"),
+        ),
+      );
+    }
+    if (agent.ui.chips.includes("help_proof")) {
+      chips.append(
+        chip("校对选区", () => void handleUserText("请校对当前选区的文字。")),
+      );
+    }
+    if (agent.ui.chips.includes("help_grep")) {
+      chips.append(
+        chip("GREP 示例", () =>
+          void handleUserText("给我一个清理连续空格的 InDesign GREP，并 propose_grep。"),
+        ),
+      );
+    }
     chips.classList.toggle("hidden", agent.ui.chips.length === 0);
     headerSub.textContent = agent.specialized
       ? `${agent.name} · v${PLUGIN_UI_VERSION}`
@@ -841,6 +876,17 @@ export function mountPanel(root: HTMLElement): void {
     return id;
   }
 
+  function selectionTextFromSnapshot(
+    snapshot: { selection: Array<Record<string, unknown>> } | null,
+  ): string {
+    if (!snapshot?.selection?.length) return "";
+    return snapshot.selection
+      .map((s) => String((s as { storyText?: string }).storyText || "").trim())
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 8000);
+  }
+
   function buildAgentContext(): AgentRuntimeContext {
     const locked = getLockedSelection();
     const preview = draft
@@ -852,6 +898,7 @@ export function mountPanel(root: HTMLElement): void {
     return {
       selectionLocked: Boolean(locked),
       selectionSummary: locked ? selectionSummary(locked.snapshot.selection) : "",
+      selectionText: selectionTextFromSnapshot(locked?.snapshot ?? null),
       hasDraft: Boolean(draft),
       readyToReplace: Boolean(draft),
       draftPreview: preview,
@@ -949,6 +996,40 @@ export function mountPanel(root: HTMLElement): void {
               : "还没有读到表样式。",
           );
           break;
+        case "apply_table_style": {
+          const style =
+            matchTableStyleName(action.styleName, tableStyles) ||
+            action.styleName.trim();
+          if (!isInDesignRuntime()) {
+            addMessage(
+              "assistant",
+              `（浏览器桩）将应用表样式「${style}」到选区真表。`,
+            );
+            break;
+          }
+          const result = await applyTableStyleToSelection(style);
+          addMessage("assistant", result.message);
+          if (result.applied > 0 && activeProjectKey && activeProjectKey !== "no-doc") {
+            const mem = loadMemory();
+            const project = mem.projects[activeProjectKey];
+            if (project) {
+              project.preferredTableStyle = style;
+              saveMemory(mem);
+            }
+          }
+          break;
+        }
+        case "propose_grep": {
+          const lines = [
+            "【InDesign GREP · 可复制到查找/更改】",
+            `查找：${action.find}`,
+          ];
+          if (action.changeTo) lines.push(`替换为：${action.changeTo}`);
+          if (action.flags) lines.push(`选项：${action.flags}`);
+          if (action.note) lines.push(`说明：${action.note}`);
+          addMessage("assistant", lines.join("\n"));
+          break;
+        }
         case "open_config":
           switchTab("config");
           break;
@@ -1172,7 +1253,7 @@ export function mountPanel(root: HTMLElement): void {
   addMessage(
     "assistant",
     isInDesignRuntime()
-      ? "你好。这里是默认对话：直接说需求即可。\n若要做「伪表/图表 → 真表」，请点下方推荐或打开「Agent」列表加载「伪表恢复」。模型在「配置」。"
+      ? "你好。这里是默认对话。\n打开「Agent」可加载：伪表恢复、贴表规范化、文稿比对、文章校对、GREP 助手。\n（不做溢出巡检/缺图重链——其它软件已有提醒。）模型在「配置」。"
       : "当前不在 InDesign 面板环境。连上宿主后即可使用。",
   );
 }

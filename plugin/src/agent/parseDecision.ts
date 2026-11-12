@@ -20,10 +20,29 @@ function parseAction(raw: unknown): AgentAction | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   if (!isActionType(o.type)) return null;
-  if (o.type === "replace_table") {
+  if (o.type === "replace_table" || o.type === "apply_table_style") {
     const styleName = String(o.styleName || "").trim();
     if (!styleName) return null;
-    return { type: "replace_table", styleName };
+    return { type: o.type, styleName };
+  }
+  if (o.type === "propose_grep") {
+    const find = String(o.find || o.pattern || "").trim();
+    if (!find) return null;
+    // Keep whitespace-only replacements (e.g. collapse spaces → single space).
+    const hasChange =
+      typeof o.changeTo === "string" || typeof o.replace === "string";
+    const changeTo = hasChange
+      ? String(o.changeTo ?? o.replace ?? "")
+      : undefined;
+    const flags = String(o.flags || "").trim();
+    const note = String(o.note || "").trim();
+    return {
+      type: "propose_grep",
+      find,
+      ...(changeTo !== undefined ? { changeTo } : {}),
+      ...(flags ? { flags } : {}),
+      ...(note ? { note } : {}),
+    };
   }
   if (o.type === "none") return { type: "none" };
   if (o.type === "lock_selection") return { type: "lock_selection" };

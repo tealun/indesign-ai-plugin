@@ -157,6 +157,115 @@ export async function listTableStyleNames(): Promise<string[]> {
   return names;
 }
 
+/**
+ * Apply a document table style to every Table found in the current selection
+ * (or nested in selected text frames). Used by「贴表规范化」Agent.
+ */
+export async function applyTableStyleToSelection(
+  styleName: string,
+): Promise<{ applied: number; message: string }> {
+  const doc = getDoc();
+  const app = getApp();
+  let style: any;
+  try {
+    style = doc.tableStyles.itemByName(styleName);
+    if (!style || style.isValid === false) {
+      return { applied: 0, message: `表样式不存在：${styleName}` };
+    }
+  } catch {
+    return { applied: 0, message: `表样式不存在：${styleName}` };
+  }
+
+  const tables: any[] = [];
+  const seen = new Set<string>();
+  const pushTable = (table: any) => {
+    try {
+      const id = String(table.id);
+      if (seen.has(id)) return;
+      seen.add(id);
+      tables.push(table);
+    } catch {
+      /* skip */
+    }
+  };
+
+  const harvest = (item: any) => {
+    if (!item) return;
+    try {
+      const ctor = String(item.constructor?.name || item.constructorName || "");
+      if (/table/i.test(ctor) || item.columns) {
+        pushTable(item);
+        return;
+      }
+    } catch {
+      /* continue */
+    }
+    try {
+      const nested = item.tables;
+      if (nested && typeof nested.length === "number") {
+        for (let t = 0; t < nested.length; t++) pushTable(nested.item(t));
+      }
+    } catch {
+      /* no tables */
+    }
+    try {
+      const parent = item.parent;
+      if (parent?.tables) {
+        const nested = parent.tables;
+        for (let t = 0; t < nested.length; t++) pushTable(nested.item(t));
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  try {
+    const sel = app.selection;
+    const n = Number(sel?.length ?? 0);
+    for (let i = 0; i < n; i++) harvest(sel[i] ?? sel.item?.(i));
+  } catch {
+    return { applied: 0, message: "无法读取当前选区。" };
+  }
+
+  if (tables.length === 0) {
+    return {
+      applied: 0,
+      message: "选区里没有找到真表。请点选表格或含表的文本框后再试。",
+    };
+  }
+
+  let applied = 0;
+  const errors: string[] = [];
+  for (const table of tables) {
+    try {
+      table.appliedTableStyle = style;
+      try {
+        if (typeof table.clearTableStyleOverrides === "function") {
+          table.clearTableStyleOverrides(true);
+        }
+      } catch {
+        /* optional */
+      }
+      applied += 1;
+    } catch (e) {
+      errors.push(String(e));
+    }
+  }
+
+  if (applied === 0) {
+    return {
+      applied: 0,
+      message: `未能应用表样式「${styleName}」${errors[0] ? `：${errors[0]}` : ""}`,
+    };
+  }
+  return {
+    applied,
+    message: `已对 ${applied} 张表应用「${styleName}」${
+      errors.length ? `（部分失败 ${errors.length}）` : ""
+    }。`,
+  };
+}
+
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunk = 0x8000;
