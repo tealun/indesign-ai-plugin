@@ -8,7 +8,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.2.8";
+const PLUGIN_UI_VERSION = "0.2.9";
 
 function newId(): string {
   try {
@@ -146,7 +146,9 @@ export function mountPanel(root: HTMLElement): void {
     ),
   );
   configView.append(
-    el("p", { className: "lede" }, ["模型与中转只在这里改，对话里专心处理版面。"]),
+    el("p", { className: "lede" }, [
+      "模型与中转只在这里改。若你的 Codex/中转配置是 wire_api=responses，下方 Wire API 必须选 Responses，否则会打到 /chat/completions 并 404。",
+    ]),
     el("label", {}, ["Provider", el("select", { id: "provider" }, providerOptions)]),
     el("label", {}, [
       "Base URL",
@@ -357,7 +359,7 @@ export function mountPanel(root: HTMLElement): void {
 
     addMessage(
       "assistant",
-      `② 正在调用模型识别（${s.model} → ${s.baseUrl}，超时 ${Math.round(s.timeoutMs / 1000)}s）…`,
+      `② 正在调用模型识别（${s.model} · ${s.wireApi === "responses" ? "Responses /responses" : "ChatCompletions /chat/completions"} → ${s.baseUrl}，超时 ${Math.round(s.timeoutMs / 1000)}s）…`,
     );
     draft = await directRecoverTable(s, {
       op: "recover_table",
