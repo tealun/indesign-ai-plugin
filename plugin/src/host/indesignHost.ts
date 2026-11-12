@@ -5,6 +5,7 @@ import { tryRequireIndesign, tryRequireUxp } from "./uxpRequire.js";
 import { CAPTURE_MAX_EDGE, CAPTURE_TARGET_PPI } from "../capture/limits.js";
 import { readPngSize } from "../capture/pngSize.js";
 import { withTimeout } from "../util/timeout.js";
+import { isImageLikeItem, resolveToCropFrame, uniqueResolvedTargets } from "./resolveCropFrame.js";
 
 function getApp(): any {
   const mod = tryRequireIndesign();
@@ -47,7 +48,9 @@ function classifyItem(item: any): SelectionItem["type"] {
   return "graphic";
 }
 
-function toSelectionItem(item: any): SelectionItem {
+function toSelectionItem(raw: any): SelectionItem {
+  const resolved = resolveToCropFrame(raw);
+  const item = resolved.target;
   const bounds = boundsFromGeometric(Array.from(item.geometricBounds as number[]));
   const id = String(item.id);
   const type = classifyItem(item);
@@ -69,7 +72,26 @@ function toSelectionItem(item: any): SelectionItem {
     }
     return { id, type, bounds, childCount };
   }
-  return { id, type: "graphic", bounds };
+  if (resolved.liftedFromImage && resolved.imageId) {
+    return {
+      id,
+      type: "graphic",
+      bounds,
+      role: "frame",
+      normalizedFromImageId: resolved.imageId,
+      notes: `由内嵌图#${resolved.imageId}归一到图框，按裁切可见区域识别`,
+    };
+  }
+  if (isImageLikeItem(item)) {
+    return {
+      id,
+      type: "graphic",
+      bounds,
+      role: "imageContent",
+      notes: "未能找到裁切图框，将按媒体对象本身导出",
+    };
+  }
+  return { id, type: "graphic", bounds, role: "frame" };
 }
 
 export function unionBounds(items: SelectionItem[]): Bounds {
@@ -99,12 +121,21 @@ export async function readLiveSelectionSnapshot(): Promise<DocumentSnapshot> {
       selection: [],
     };
   }
-  const selection = sel.map(toSelectionItem);
-  const pageIndex = pageIndexOfItem(doc, sel[0]);
+  // Normalize image content → crop frames, then dedupe
+  const { targets } = uniqueResolvedTargets(sel);
+  const selection = targets.map(toSelectionItem);
+  // Deduplicate selection items by id (toSelectionItem already resolves)
+  const seen = new Set<string>();
+  const uniqueSelection = selection.filter((s) => {
+    if (seen.has(s.id)) return false;
+    seen.add(s.id);
+    return true;
+  });
+  const pageIndex = pageIndexOfItem(doc, targets[0] ?? sel[0]);
   return {
     documentName: String(doc.name || "document"),
     pageIndex,
-    selection,
+    selection: uniqueSelection,
   };
 }
 
@@ -192,23 +223,39 @@ export async function exportSelectionToPngDataUrl(selectionIds: string[]): Promi
   const folder = await uxp.storage.localFileSystem.getTemporaryFolder();
   const file = await folder.createFile(`id-ai-sel-${Date.now()}.png`, { overwrite: true });
 
-  // Prefer exporting first selected item (group exports as one). Re-select locked ids.
-  const items: any[] = [];
+  // Resolve ids → page items → crop frames (visible area only for clipped images).
+  const rawItems: any[] = [];
   for (const id of selectionIds) {
     try {
-      items.push(doc.pageItems.itemByID(Number(id)));
+      rawItems.push(doc.pageItems.itemByID(Number(id)));
     } catch {
-      /* skip missing */
+      /* Image may not be in pageItems — try allGraphics / skip */
+      try {
+        const g = doc.allGraphics;
+        for (let i = 0; i < g.length; i++) {
+          const it = g.item(i);
+          if (String(it.id) === String(id)) {
+            rawItems.push(it);
+            break;
+          }
+        }
+      } catch {
+        /* skip */
+      }
     }
   }
-  if (items.length === 0) throw new Error("锁定的选区对象已不存在，请重新选中");
+  if (rawItems.length === 0) throw new Error("锁定的选区对象已不存在，请重新选中");
 
-  doc.selection = items;
-  const target = items[0];
+  const { targets, notes } = uniqueResolvedTargets(rawItems);
+  if (targets.length === 0) throw new Error("无法解析可导出的图框/对象");
+
+  doc.selection = targets;
+  const target = targets[0];
   const format = ExportFormat?.PNG_FORMAT ?? "PNG format";
 
   await withTimeout(
     Promise.resolve().then(() => {
+      // Export the crop frame so PNG matches on-page visible area (not full uncropped media).
       target.exportFile(format, file);
     }),
     45_000,
@@ -224,7 +271,11 @@ export async function exportSelectionToPngDataUrl(selectionIds: string[]): Promi
     binary instanceof ArrayBuffer
       ? binary
       : (binary as { buffer: ArrayBuffer }).buffer ?? new Uint8Array(binary as ArrayLike<number>).buffer;
-  return finalizeExportedPng(buffer);
+  const result = await finalizeExportedPng(buffer);
+  if (notes.length) {
+    result.warnings = [...result.warnings, ...notes];
+  }
+  return result;
 }
 
 function resolvePage(doc: any, pageIndex: number): any {

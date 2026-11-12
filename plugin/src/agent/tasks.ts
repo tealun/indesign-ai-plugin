@@ -25,9 +25,9 @@ export type TaskDefinition = {
 export const TASK_CATALOG: TaskDefinition[] = [
   {
     id: "m0t.vector_table_recover",
-    title: "矢量伪表 → 真表",
+    title: "伪表/图表 → 真表",
     triggers:
-      "用户要把选中的矢量/曲线假表转成可编辑 InDesign 表；或说转成表格、换成真表、一键转表。",
+      "用户要把选中的矢量/曲线假表，或裁切后的表格图片（含只选中内嵌图）转成可编辑 InDesign 表；或说转成表格、换成真表、一键转表。内嵌图会归一到图框并只识别可见裁切区域。",
     steps: [
       "lock_selection（若尚未锁定）",
       "recognize_table（导出选区并视觉识别）",

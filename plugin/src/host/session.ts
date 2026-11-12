@@ -41,5 +41,12 @@ export function clearLockedSelection(): void {
 
 export function selectionSummary(items: SelectionItem[]): string {
   if (items.length === 0) return "无选区";
-  return items.map((i) => `${i.type}#${i.id}`).join(", ");
+  return items
+    .map((i) => {
+      if (i.type === "graphic" && i.normalizedFromImageId) {
+        return `graphic#${i.id}(图框←图${i.normalizedFromImageId})`;
+      }
+      return `${i.type}#${i.id}`;
+    })
+    .join(", ");
 }

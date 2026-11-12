@@ -43,6 +43,11 @@ export type SelectionItem =
       id: string;
       type: "graphic";
       bounds: Bounds;
+      /** Crop frame that contains a placed image (visible area). */
+      role?: "frame" | "imageContent";
+      /** When id is a frame lifted from an inner Image selection */
+      normalizedFromImageId?: string;
+      notes?: string;
     };
 
 export type DocumentSnapshot = {

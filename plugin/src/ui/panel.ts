@@ -8,7 +8,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.3.6";
+const PLUGIN_UI_VERSION = "0.3.7";
 
 function newId(): string {
   try {
@@ -378,7 +378,12 @@ export function mountPanel(root: HTMLElement): void {
     await refreshStylesSilent();
     addMessage(
       "assistant",
-      `已锁定选区：${selectionSummary(snapshot.selection)}\n页面 ${snapshot.pageIndex + 1} · ${ub.w.toFixed(1)}×${ub.h.toFixed(1)} pt\n下一步可以说「识别表格」。`,
+      (() => {
+        const notes = snapshot.selection
+          .map((s) => (s.type === "graphic" ? s.notes : undefined))
+          .filter(Boolean);
+        return `已锁定选区：${selectionSummary(snapshot.selection)}\n页面 ${snapshot.pageIndex + 1} · ${ub.w.toFixed(1)}×${ub.h.toFixed(1)} pt${notes.length ? `\n${notes.join("\n")}` : ""}\n下一步可以说「识别表格」。`;
+      })(),
     );
   }
 
