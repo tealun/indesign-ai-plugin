@@ -3,6 +3,7 @@ import type { Bounds, DocumentSnapshot, LayoutCommand, SelectionItem } from "../
 import { boundsFromGeometric, geometricFromBounds } from "./geometry.js";
 import { tryRequireIndesign, tryRequireUxp } from "./uxpRequire.js";
 import { CAPTURE_MAX_EDGE, CAPTURE_TARGET_PPI } from "../capture/limits.js";
+import { withTimeout } from "../util/timeout.js";
 
 function getApp(): any {
   const mod = tryRequireIndesign();
@@ -141,11 +142,15 @@ async function maybeDownscaleDataUrl(
     return { dataUrl, width: 0, height: 0, scaled: false, warnings };
   }
   const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("无法解码导出的 PNG"));
-    img.src = dataUrl;
-  });
+  await withTimeout(
+    new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("无法解码导出的 PNG"));
+      img.src = dataUrl;
+    }),
+    15_000,
+    "解码导出 PNG",
+  );
   const w = img.naturalWidth || img.width;
   const h = img.naturalHeight || img.height;
   const edge = Math.max(w, h);
@@ -213,17 +218,28 @@ export async function exportSelectionToPngDataUrl(selectionIds: string[]): Promi
   if (items.length === 0) throw new Error("锁定的选区对象已不存在，请重新选中");
 
   doc.selection = items;
-  const target = items.length === 1 ? items[0] : items[0];
+  const target = items[0];
   const format = ExportFormat?.PNG_FORMAT ?? "PNG format";
-  target.exportFile(format, file);
 
-  const binary = await file.read({ format: uxp.storage.formats.binary });
+  await withTimeout(
+    Promise.resolve().then(() => {
+      target.exportFile(format, file);
+    }),
+    45_000,
+    "导出选区 PNG",
+  );
+
+  const binary = await withTimeout(
+    file.read({ format: uxp.storage.formats.binary }),
+    20_000,
+    "读取导出文件",
+  );
   const buffer: ArrayBuffer =
     binary instanceof ArrayBuffer
       ? binary
       : (binary as { buffer: ArrayBuffer }).buffer ?? new Uint8Array(binary as ArrayLike<number>).buffer;
   const dataUrl = `data:image/png;base64,${arrayBufferToBase64(buffer)}`;
-  return maybeDownscaleDataUrl(dataUrl, CAPTURE_MAX_EDGE);
+  return withTimeout(maybeDownscaleDataUrl(dataUrl, CAPTURE_MAX_EDGE), 20_000, "缩放选区图");
 }
 
 function resolvePage(doc: any, pageIndex: number): any {

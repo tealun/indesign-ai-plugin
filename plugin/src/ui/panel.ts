@@ -3,7 +3,18 @@ import { loadSettings, maskApiKey, saveSettings } from "../settings/store.js";
 import type { ProviderSettings, ProviderType, TableDraft } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.2.4";
+const PLUGIN_UI_VERSION = "0.2.5";
+
+function newId(): string {
+  try {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+  } catch {
+    /* UXP may lack randomUUID */
+  }
+  return `id-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 import { runCommandBatch } from "../executor/runBatch.js";
 import { buildTableReplaceCommands } from "../protocol/buildTableReplaceCommands.js";
@@ -65,7 +76,7 @@ export function mountPanel(root: HTMLElement): void {
     id: "composer",
     className: "composer",
     rows: "2",
-    placeholder: "直接说：读取选区 / 识别表格 / 用「样式名」替换…",
+    placeholder: "选中后直接说：转成表格 / 用「样式名」转成表格…",
   }) as HTMLTextAreaElement;
   const thumb = el("img", {
     id: "thumb",
@@ -184,9 +195,9 @@ export function mountPanel(root: HTMLElement): void {
   // —— Chat chrome ——
   const styleSelect = el("select", { id: "tableStyle", className: "style-select" });
   const chips = el("div", { className: "chips" }, [
+    chip("转成表格", () => void handleUserText("转成表格")),
     chip("读取选区", () => void handleUserText("读取选区")),
     chip("识别表格", () => void handleUserText("识别表格")),
-    chip("确认", () => void handleUserText("确认")),
     chip("替换为真表", () => void handleUserText("替换为真表")),
   ]);
 
@@ -283,24 +294,28 @@ export function mountPanel(root: HTMLElement): void {
     );
   }
 
-  async function doRecognize(note?: string): Promise<void> {
+  async function doRecognize(
+    note?: string,
+    opts?: { quiet?: boolean },
+  ): Promise<boolean> {
     const locked = getLockedSelection();
     if (!locked) {
-      addMessage("assistant", "还没有锁定选区。先说「读取选区」。");
-      return;
+      addMessage("assistant", "还没有锁定选区。先说「读取选区」或「转成表格」。");
+      return false;
     }
     const s = loadSettings();
     if (!s.baseUrl || !s.apiKey || !s.model) {
       addMessage("assistant", "模型还没配好。请到「配置」填 Base URL / API Key / 识图 Model。");
       switchTab("config");
-      return;
+      return false;
     }
-    addMessage("assistant", `正在导出选区并识别（发送至 ${s.baseUrl}）…`);
+
     if (!imageDataUrl) {
+      addMessage("assistant", "① 正在导出选区图…");
       const cap = await exportSelectionPng();
       if (!cap.dataUrl) {
         addMessage("assistant", `导出失败：${cap.warnings.join("；") || "无图像"}`);
-        return;
+        return false;
       }
       imageDataUrl = cap.dataUrl;
       thumb.src = imageDataUrl;
@@ -308,8 +323,13 @@ export function mountPanel(root: HTMLElement): void {
       if (cap.warnings.length) {
         addMessage("system", cap.warnings.join("；"));
       }
+      addMessage("system", "选区图已导出。");
     }
 
+    addMessage(
+      "assistant",
+      `② 正在调用模型识别（${s.model} → ${s.baseUrl}，超时 ${Math.round(s.timeoutMs / 1000)}s）…`,
+    );
     draft = await directRecoverTable(s, {
       op: "recover_table",
       snapshot: locked.snapshot,
@@ -319,7 +339,7 @@ export function mountPanel(root: HTMLElement): void {
     const v = validateTableDraft(draft);
     if (!v.ok) {
       addMessage("assistant", `识别结果不合法：${v.error.message}`);
-      return;
+      return false;
     }
     draft = v.draft;
     if (draft.suggestedTableStyleName) {
@@ -330,10 +350,29 @@ export function mountPanel(root: HTMLElement): void {
       .slice(0, 8)
       .map((r) => r.join(" | "))
       .join("\n");
-    addMessage(
-      "assistant",
-      `识别到 ${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列（表头 ${draft.headerRowCount} / 表尾 ${draft.footerRowCount}）。\n\n预览：\n${preview}${draft.rows.length > 8 ? "\n…" : ""}\n\n请选择表样式，然后说「替换为真表」或「用样式名替换」。`,
-    );
+    if (!opts?.quiet) {
+      addMessage(
+        "assistant",
+        `识别到 ${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列（表头 ${draft.headerRowCount} / 表尾 ${draft.footerRowCount}）。\n\n预览：\n${preview}${draft.rows.length > 8 ? "\n…" : ""}\n\n请选择表样式，然后说「替换为真表」；或直接说「转成表格」走全流程。`,
+      );
+    } else {
+      addMessage(
+        "assistant",
+        `识别完成：${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列。\n${preview}${draft.rows.length > 8 ? "\n…" : ""}`,
+      );
+    }
+    return true;
+  }
+
+  function resolveStyleName(preferred?: string): string | null {
+    const fromArg = (preferred || "").trim();
+    if (fromArg) return fromArg;
+    const fromSelect = (styleSelect.value || "").trim();
+    if (fromSelect) return fromSelect;
+    const suggested = (draft?.suggestedTableStyleName || "").trim();
+    if (suggested && tableStyles.includes(suggested)) return suggested;
+    if (tableStyles.length === 1) return tableStyles[0]!;
+    return null;
   }
 
   async function requestReplace(styleName?: string): Promise<void> {
@@ -387,9 +426,9 @@ export function mountPanel(root: HTMLElement): void {
       addMessage("assistant", `无法生成指令：${built.error.message}`);
       return;
     }
-    addMessage("assistant", "正在写入真表…");
+    addMessage("assistant", "③ 正在写入真表…");
     const report = await runCommandBatch({
-      requestId: crypto.randomUUID(),
+      requestId: newId(),
       commands: built.commands,
       host: getHost(),
     });
@@ -406,6 +445,60 @@ export function mountPanel(root: HTMLElement): void {
     draft = null;
     thumb.classList.add("hidden");
     addMessage("assistant", `完成：已用样式「${styleName}」生成真表，原矢量已删除。`);
+  }
+
+  /** One-shot: lock → recognize → replace (no extra confirm). */
+  async function doAutoTable(styleName?: string, note?: string): Promise<void> {
+    const s = loadSettings();
+    if (!s.baseUrl || !s.apiKey || !s.model) {
+      addMessage("assistant", "模型还没配好。请到「配置」填 Base URL / API Key / 识图 Model。");
+      switchTab("config");
+      return;
+    }
+
+    if (!getLockedSelection()) {
+      addMessage("assistant", "开始全流程：先读取当前选区…");
+      await doLock();
+      if (!getLockedSelection()) return;
+    } else {
+      addMessage("assistant", "开始全流程：已有锁定选区，进入识别…");
+    }
+
+    await refreshStylesSilent();
+    imageDataUrl = ""; // force fresh capture for auto run
+    const ok = await doRecognize(note, { quiet: true });
+    if (!ok || !draft) return;
+
+    const name = resolveStyleName(styleName);
+    if (!name) {
+      addMessage(
+        "assistant",
+        tableStyles.length
+          ? `识别已完成，但还不知道用哪个表样式。请在下方选择，或说「用「样式名」替换」。\n可用：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`
+          : "识别已完成，但文档里没有可用表样式。请先在 InDesign 建好表样式。",
+      );
+      return;
+    }
+
+    styleSelect.value = name;
+    const host = getHost();
+    const locked = getLockedSelection();
+    if (!locked) {
+      addMessage("assistant", "选区在识别后失效，请重新选中后再说「转成表格」。");
+      return;
+    }
+    const pre = await preflightTableReplace({
+      draft,
+      tableStyleName: name,
+      locked,
+      host,
+    });
+    if (!pre.ok) {
+      addMessage("assistant", `预检未通过（未改文档）：${pre.error.message}`);
+      return;
+    }
+    addMessage("assistant", `样式「${name}」预检通过，开始替换（可 Undo）…`);
+    await runReplace(name);
   }
 
   async function handleUserText(raw: string): Promise<void> {
@@ -448,7 +541,7 @@ export function mountPanel(root: HTMLElement): void {
         case "help":
           addMessage(
             "assistant",
-            "可以这样说：\n· 读取选区\n· 识别表格\n· 用「样式名」替换 / 替换为真表\n· 确认 / 取消（仅替换前）\n· 有哪些表样式\n· 配置\n\n流程：选中矢量表 → 读取 → 识别 → 选样式 → 替换。",
+            "可以这样说：\n· 转成表格（全自动：读取→识别→替换）\n· 用「样式名」转成表格\n· 读取选区 / 识别表格 / 替换为真表（分步）\n· 有哪些表样式\n· 配置\n\n推荐：选中矢量伪表后直接说「转成表格」。",
           );
           break;
         case "config":
@@ -483,13 +576,16 @@ export function mountPanel(root: HTMLElement): void {
         case "recognize":
           await doRecognize(intent.note);
           break;
+        case "autoTable":
+          await doAutoTable(intent.styleName, intent.note);
+          break;
         case "replace":
           await requestReplace(intent.styleName);
           break;
         case "unknown":
           addMessage(
             "assistant",
-            "我还没听懂。可以说「帮助」，或用上方快捷短语。",
+            "我还没听懂。可以说「转成表格」走全流程，或说「帮助」。",
           );
           break;
       }
@@ -516,7 +612,7 @@ export function mountPanel(root: HTMLElement): void {
   addMessage(
     "assistant",
     isInDesignRuntime()
-      ? "你好。打开画册、选中矢量伪表后，直接在下方跟我说「读取选区」。模型参数在「配置」里。"
+      ? "你好。打开画册、选中矢量伪表后，直接说「转成表格」——我会自动读取、识别并替换。表样式可在下方先选好，或说「用「样式名」转成表格」。模型在「配置」。"
       : "当前不在 InDesign 面板环境。连上宿主后即可处理真表替换。",
   );
 }

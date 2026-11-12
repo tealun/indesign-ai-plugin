@@ -1,6 +1,7 @@
 import type { ChatRequest, ProviderSettings } from "../types/protocol.js";
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
+import { withTimeout } from "../util/timeout.js";
 
 async function chatAnthropic(
   request: ChatRequest,
@@ -34,23 +35,32 @@ async function chatAnthropic(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), settings.timeoutMs);
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": settings.apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: settings.model,
-        max_tokens: 4096,
-        temperature: settings.temperature,
-        messages: [{ role: "user", content }],
+    const res = await withTimeout(
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": settings.apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: settings.model,
+          max_tokens: 4096,
+          temperature: settings.temperature,
+          messages: [{ role: "user", content }],
+        }),
+        signal: controller.signal,
       }),
-      signal: controller.signal,
-    });
-    const text = await res.text();
+      settings.timeoutMs + 2_000,
+      "调用识图模型",
+    );
+    const text = await withTimeout(res.text(), settings.timeoutMs, "读取模型响应");
     return { text, status: res.status };
+  } catch (e) {
+    if (e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message))) {
+      throw new Error(`调用识图模型超时（>${Math.round(settings.timeoutMs / 1000)}s）`);
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }

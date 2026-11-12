@@ -2,6 +2,7 @@ export type ChatIntent =
   | { kind: "help" }
   | { kind: "lock" }
   | { kind: "recognize"; note?: string }
+  | { kind: "autoTable"; styleName?: string; note?: string }
   | { kind: "replace"; styleName?: string }
   | { kind: "confirm" }
   | { kind: "cancel" }
@@ -11,9 +12,15 @@ export type ChatIntent =
   | { kind: "clear" }
   | { kind: "unknown"; text: string };
 
+function extractStyleName(text: string): string | undefined {
+  const styleMatch =
+    text.match(/(?:用|套用|使用)?[「"']?([^「」"'\s]+)[」"']?(?:表)?样式/) ||
+    text.match(/(?:用|套用|使用)\s*[「"']?([^「」"'\s]+)[」"']?/);
+  return styleMatch?.[1];
+}
+
 export function parseChatIntent(raw: string): ChatIntent {
   const text = raw.trim();
-  const lower = text.toLowerCase();
   if (!text) return { kind: "help" };
 
   if (/^(帮助|help|\?|怎么用)/i.test(text)) return { kind: "help" };
@@ -30,24 +37,33 @@ export function parseChatIntent(raw: string): ChatIntent {
     return { kind: "lock" };
   }
 
-  if (/(识别|识图|导出并识别|分析表格|读表|OCR|转换成表)/i.test(text)) {
+  // Full pipeline: lock → recognize → replace
+  if (
+    /(转成(真)?表|换成真表|伪表转|矢量转表|一键(转换|替换|转表)|全自动|自动(转换|替换|转表)|帮我转成)/.test(
+      text,
+    )
+  ) {
+    const styleName = extractStyleName(text);
+    return styleName
+      ? { kind: "autoTable", styleName, note: text }
+      : { kind: "autoTable", note: text };
+  }
+
+  // Recognize only (not full convert)
+  if (/(识别|识图|导出并识别|分析表格|读表|OCR)/i.test(text)) {
     return { kind: "recognize", note: text };
   }
 
-  const styleMatch =
-    text.match(/(?:用|套用|使用)?[「"']?([^「」"'\s]+)[」"']?(?:表)?样式(?:替换|转成真表|应用)?/) ||
-    text.match(/替换(?:成|为|用)?\s*[「"']?([^「」"'\s]+)[」"']?/);
-  if (/(替换|转成真表|生成真表|落地|应用)/.test(text) || styleMatch) {
-    const styleName = styleMatch?.[1];
+  const styleName = extractStyleName(text);
+  if (/(替换|转成真表|生成真表|落地|应用)/.test(text) || styleName) {
     return styleName
       ? { kind: "replace", styleName }
       : { kind: "replace" };
   }
 
   if (/选区|表格|矢量/.test(text) && /(开始|帮我|处理)/.test(text)) {
-    return { kind: "lock" };
+    return { kind: "autoTable", note: text };
   }
 
-  void lower;
   return { kind: "unknown", text };
 }

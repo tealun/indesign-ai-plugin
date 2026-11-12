@@ -19,4 +19,12 @@ describe("parseChatIntent", () => {
     assert.equal(parseChatIntent("确认").kind, "confirm");
     assert.equal(parseChatIntent("取消").kind, "cancel");
   });
+
+  it("parses auto table pipeline", () => {
+    assert.equal(parseChatIntent("转成表格").kind, "autoTable");
+    assert.equal(parseChatIntent("帮我转成真表").kind, "autoTable");
+    const withStyle = parseChatIntent("用「正文表」样式转成表格");
+    assert.equal(withStyle.kind, "autoTable");
+    if (withStyle.kind === "autoTable") assert.equal(withStyle.styleName, "正文表");
+  });
 });

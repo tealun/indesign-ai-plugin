@@ -1,6 +1,7 @@
 import type { ChatRequest, ProviderSettings } from "../types/protocol.js";
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
+import { withTimeout } from "../util/timeout.js";
 
 function extractMessageText(httpBody: string): string {
   try {
@@ -75,28 +76,37 @@ async function chatOpenAICompatible(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), settings.timeoutMs);
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: settings.model,
-        temperature: settings.temperature,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You extract InDesign table structure. Output JSON only. Never output scripts.",
-          },
-          { role: "user", content: userContent },
-        ],
+    const res = await withTimeout(
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${settings.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: settings.model,
+          temperature: settings.temperature,
+          messages: [
+            {
+              role: "system",
+              content:
+                "You extract InDesign table structure. Output JSON only. Never output scripts.",
+            },
+            { role: "user", content: userContent },
+          ],
+        }),
+        signal: controller.signal,
       }),
-      signal: controller.signal,
-    });
-    const text = await res.text();
+      settings.timeoutMs + 2_000,
+      "调用识图模型",
+    );
+    const text = await withTimeout(res.text(), settings.timeoutMs, "读取模型响应");
     return { text, status: res.status };
+  } catch (e) {
+    if (e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message))) {
+      throw new Error(`调用识图模型超时（>${Math.round(settings.timeoutMs / 1000)}s）。请检查中转站/网络，或在配置里加大超时。`);
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }

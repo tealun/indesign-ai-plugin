@@ -1,6 +1,7 @@
 import type { ChatRequest, ProviderSettings } from "../types/protocol.js";
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
+import { withTimeout } from "../util/timeout.js";
 
 async function chatGemini(
   request: ChatRequest,
@@ -37,17 +38,26 @@ async function chatGemini(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), settings.timeoutMs);
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts }],
-        generationConfig: { temperature: settings.temperature },
+    const res = await withTimeout(
+      fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts }],
+          generationConfig: { temperature: settings.temperature },
+        }),
+        signal: controller.signal,
       }),
-      signal: controller.signal,
-    });
-    const text = await res.text();
+      settings.timeoutMs + 2_000,
+      "调用识图模型",
+    );
+    const text = await withTimeout(res.text(), settings.timeoutMs, "读取模型响应");
     return { text, status: res.status };
+  } catch (e) {
+    if (e instanceof Error && (e.name === "AbortError" || /aborted/i.test(e.message))) {
+      throw new Error(`调用识图模型超时（>${Math.round(settings.timeoutMs / 1000)}s）`);
+    }
+    throw e;
   } finally {
     clearTimeout(timer);
   }
