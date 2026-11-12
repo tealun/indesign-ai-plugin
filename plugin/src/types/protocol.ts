@@ -149,6 +149,9 @@ export type ProviderType =
   | "google_gemini"
   | "custom_openai_compatible";
 
+/** OpenAI-compatible relays: classic chat completions vs Responses API (Codex wire_api). */
+export type OpenAiWireApi = "chat_completions" | "responses";
+
 export type ProviderSettings = {
   provider: ProviderType;
   baseUrl: string;
@@ -156,6 +159,8 @@ export type ProviderSettings = {
   model: string;
   timeoutMs: number;
   temperature: number;
+  /** Only used by openai_compatible / custom_openai_compatible. Default chat_completions. */
+  wireApi?: OpenAiWireApi;
 };
 
 export type ChatRequest = {

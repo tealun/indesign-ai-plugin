@@ -1,9 +1,14 @@
 import { listProviders } from "../providers/registry.js";
 import { loadSettings, maskApiKey, saveSettings } from "../settings/store.js";
-import type { ProviderSettings, ProviderType, TableDraft } from "../types/protocol.js";
+import type {
+  OpenAiWireApi,
+  ProviderSettings,
+  ProviderType,
+  TableDraft,
+} from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.2.7";
+const PLUGIN_UI_VERSION = "0.2.8";
 
 function newId(): string {
   try {
@@ -56,6 +61,7 @@ function readConfigForm(root: HTMLElement): ProviderSettings {
     model: q("model"),
     timeoutMs: Number(q("timeoutMs")) || current.timeoutMs,
     temperature: Number(q("temperature")) || current.temperature,
+    wireApi: (q("wireApi") as OpenAiWireApi) || current.wireApi || "chat_completions",
   };
 }
 
@@ -165,8 +171,31 @@ export function mountPanel(root: HTMLElement): void {
         id: "model",
         type: "text",
         value: settings.model,
-        placeholder: "gpt-4o / claude-… / gemini-…",
+        placeholder: "gpt-5.5 / gpt-4o / …",
       }),
+    ]),
+    el("label", {}, [
+      "Wire API（中转协议）",
+      el("select", { id: "wireApi" }, [
+        el(
+          "option",
+          {
+            value: "chat_completions",
+            ...((settings.wireApi || "chat_completions") === "chat_completions"
+              ? { selected: "selected" }
+              : {}),
+          },
+          ["Chat Completions（/v1/chat/completions）"],
+        ),
+        el(
+          "option",
+          {
+            value: "responses",
+            ...(settings.wireApi === "responses" ? { selected: "selected" } : {}),
+          },
+          ["Responses（/v1/responses · Codex wire_api）"],
+        ),
+      ]),
     ]),
     el("div", { className: "grid-2" }, [
       el("label", {}, [
@@ -261,7 +290,7 @@ export function mountPanel(root: HTMLElement): void {
     saveSettings(next);
     addMessage(
       "system",
-      `配置已保存：${next.provider} · model=${next.model || "（空）"} · key=${maskApiKey(next.apiKey)}`,
+      `配置已保存：${next.provider} · wire=${next.wireApi || "chat_completions"} · model=${next.model || "（空）"} · key=${maskApiKey(next.apiKey)}`,
     );
     switchTab("chat");
   });

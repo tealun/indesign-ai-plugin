@@ -1,4 +1,8 @@
-import type { ProviderSettings, ProviderType } from "../types/protocol.js";
+import type {
+  OpenAiWireApi,
+  ProviderSettings,
+  ProviderType,
+} from "../types/protocol.js";
 
 const STORAGE_KEY = "indesign-ai.providerSettings.v1";
 
@@ -9,12 +13,17 @@ export const DEFAULT_SETTINGS: ProviderSettings = {
   model: "",
   timeoutMs: 60_000,
   temperature: 0.2,
+  wireApi: "chat_completions",
 };
 
 export function maskApiKey(key: string): string {
   if (!key) return "";
   if (key.length <= 4) return "****";
   return `****${key.slice(-4)}`;
+}
+
+function normalizeWireApi(value: unknown): OpenAiWireApi {
+  return value === "responses" ? "responses" : "chat_completions";
 }
 
 export function loadSettings(): ProviderSettings {
@@ -31,6 +40,7 @@ export function loadSettings(): ProviderSettings {
         typeof parsed.temperature === "number"
           ? parsed.temperature
           : DEFAULT_SETTINGS.temperature,
+      wireApi: normalizeWireApi(parsed.wireApi),
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
@@ -45,6 +55,7 @@ export function saveSettings(settings: ProviderSettings): void {
     model: settings.model.trim(),
     timeoutMs: settings.timeoutMs,
     temperature: settings.temperature,
+    wireApi: normalizeWireApi(settings.wireApi),
   };
   globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
