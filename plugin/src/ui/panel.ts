@@ -72,12 +72,9 @@ function readConfigForm(root: HTMLElement): ProviderSettings {
   const q = (id: string) =>
     (root.querySelector(`#${id}`) as HTMLInputElement | HTMLSelectElement | null)
       ?.value ?? "";
-  const modeRaw = q("connectionMode");
+  void q("connectionMode"); // reserved; phase-1 always byok
   return {
-    connectionMode:
-      modeRaw === "plugin_default"
-        ? ("plugin_default" as AiConnectionMode)
-        : ("byok" as AiConnectionMode),
+    connectionMode: "byok" as AiConnectionMode,
     provider: (q("provider") as ProviderType) || current.provider,
     baseUrl: q("baseUrl"),
     apiKey: q("apiKey") || current.apiKey,
@@ -97,6 +94,11 @@ export function mountPanel(root: HTMLElement): void {
   let draft: TableDraft | null = null;
   let tableStyles: string[] = [];
   let busy = false;
+  /** Session approval: image may be POSTed to this normalized baseUrl. */
+  let egressAllowedBaseUrl = "";
+  let pendingEgress:
+    | { baseUrl: string; resolve: (ok: boolean) => void }
+    | null = null;
   /** Per-document chat histories — never share across open files. */
   const chatByProject = new Map<string, AgentChatMessage[]>();
   let activeProjectKey = "no-doc";
@@ -135,8 +137,73 @@ export function mountPanel(root: HTMLElement): void {
 
   function setBusy(v: boolean): void {
     busy = v;
-    sendBtn.classList.toggle("ctl-disabled", v);
-    composer.disabled = v;
+    // Keep composer usable while waiting for image-egress confirm/cancel.
+    const block = v && !pendingEgress;
+    sendBtn.classList.toggle("ctl-disabled", block);
+    composer.disabled = block;
+  }
+
+  function normalizeBaseUrlKey(baseUrl: string): string {
+    return baseUrl.trim().replace(/\/$/, "");
+  }
+
+  function describeEgressTarget(baseUrl: string): string {
+    try {
+      const u = new URL(baseUrl);
+      return u.host || baseUrl;
+    } catch {
+      return baseUrl;
+    }
+  }
+
+  /**
+   * Privacy gate (AGENTS.md / 00_03): image must not leave the host until the
+   * user explicitly confirms the destination. Session-scoped per baseUrl.
+   */
+  function ensureImageEgressAllowed(baseUrl: string): Promise<boolean> {
+    const key = normalizeBaseUrlKey(baseUrl);
+    if (!key) return Promise.resolve(false);
+    if (egressAllowedBaseUrl === key) return Promise.resolve(true);
+    if (pendingEgress) {
+      return new Promise((resolve) => {
+        const prev = pendingEgress!.resolve;
+        pendingEgress!.resolve = (ok) => {
+          prev(ok);
+          resolve(ok);
+        };
+      });
+    }
+
+    return new Promise((resolve) => {
+      const settle = (ok: boolean) => {
+        if (pendingEgress?.baseUrl !== key) return;
+        pendingEgress = null;
+        if (ok) egressAllowedBaseUrl = key;
+        setBusy(busy);
+        resolve(ok);
+      };
+      pendingEgress = { baseUrl: key, resolve: settle };
+      setBusy(busy);
+
+      const host = describeEgressTarget(key);
+      const actions = el("div", { className: "chips egress-actions" });
+      const okBtn = el("div", { className: "chip", role: "button" }, ["确认外发"]);
+      const noBtn = el("div", { className: "chip", role: "button" }, ["取消"]);
+      okBtn.addEventListener("click", () => {
+        addMessage("user", "确认外发");
+        settle(true);
+      });
+      noBtn.addEventListener("click", () => {
+        addMessage("user", "取消");
+        settle(false);
+      });
+      actions.append(okBtn, noBtn);
+      addMessage(
+        "assistant",
+        `选区图/补图将发送到你配置的服务用于识图：\n${host}\n${key}\n确认后才会外发；可取消。`,
+        actions,
+      );
+    });
   }
 
   async function refreshStylesSilent(): Promise<void> {
@@ -208,30 +275,14 @@ export function mountPanel(root: HTMLElement): void {
       [p.label],
     ),
   );
-  const connectionMode = settings.connectionMode || "byok";
   configView.append(
     el("p", { className: "lede" }, [
-      "当前阶段：用「自配模型」——和你平时自己配中转一样（Base URL / API Key / Model）。「插件默认模型」尚未开放。",
+      "当前仅开放「自配模型」：填写 Base URL / API Key / Model（与日常中转相同）。「插件默认模型」通道已预留、尚未上线，故不提供选项。",
     ]),
     el("label", {}, [
       "连接方式",
       el("select", { id: "connectionMode" }, [
-        el(
-          "option",
-          {
-            value: "byok",
-            ...(connectionMode === "byok" ? { selected: "selected" } : {}),
-          },
-          ["自配模型（当前可用）"],
-        ),
-        el(
-          "option",
-          {
-            value: "plugin_default",
-            ...(connectionMode === "plugin_default" ? { selected: "selected" } : {}),
-          },
-          ["插件默认模型（尚未开放）"],
-        ),
+        el("option", { value: "byok", selected: "selected" }, ["自配模型（当前可用）"]),
       ]),
     ]),
     el("label", {}, ["Provider", el("select", { id: "provider" }, providerOptions)]),
@@ -380,16 +431,19 @@ export function mountPanel(root: HTMLElement): void {
   tabConfig.addEventListener("click", () => switchTab("config"));
 
   configView.querySelector("#saveConfig")?.addEventListener("click", () => {
+    const prevBase = normalizeBaseUrlKey(loadSettings().baseUrl);
     const next = readConfigForm(root);
     if (!(root.querySelector("#apiKey") as HTMLInputElement).value) {
       next.apiKey = loadSettings().apiKey;
     }
     saveSettings(next);
-    const modeLabel =
-      next.connectionMode === "plugin_default" ? "插件默认（未开放）" : "自配模型";
+    const nextBase = normalizeBaseUrlKey(next.baseUrl);
+    if (nextBase !== prevBase) {
+      egressAllowedBaseUrl = "";
+    }
     addMessage(
       "system",
-      `配置已保存：${modeLabel} · ${next.provider} · wire=${next.wireApi || "chat_completions"} · model=${next.model || "（空）"} · key=${maskApiKey(next.apiKey)}`,
+      `配置已保存：自配模型 · ${next.provider} · wire=${next.wireApi || "chat_completions"} · model=${next.model || "（空）"} · key=${maskApiKey(next.apiKey)}`,
     );
     switchTab("chat");
   });
@@ -454,6 +508,12 @@ export function mountPanel(root: HTMLElement): void {
         addMessage("system", cap.warnings.join("；"));
       }
       addImageMessage("选区图已导出，将据此识别表格。", imageDataUrl);
+    }
+
+    const egressOk = await ensureImageEgressAllowed(s.baseUrl);
+    if (!egressOk) {
+      addMessage("assistant", "已取消外发，未调用模型。需要识别时再说「识别表格」或「确认外发」。");
+      return false;
     }
 
     addMessage(
@@ -687,13 +747,15 @@ export function mountPanel(root: HTMLElement): void {
         case "lock_selection":
           await doLock();
           break;
-        case "recognize_table":
+        case "recognize_table": {
           if (draft) {
             addMessage("system", "识别稿已在，跳过重复识图。");
             break;
           }
-          await doRecognize(undefined, { quiet: true });
+          const recognized = await doRecognize(undefined, { quiet: true });
+          if (!recognized) return;
           break;
+        }
         case "replace_table":
           try {
             await continueWithStyle(action.styleName);
@@ -728,9 +790,26 @@ export function mountPanel(root: HTMLElement): void {
   }
 
   async function handleUserText(raw: string): Promise<void> {
-    if (busy) return;
     const text = raw.trim();
     if (!text) return;
+
+    // Image-egress confirm must work even while recognize is "busy" waiting.
+    if (pendingEgress) {
+      if (/^(确认外发|确认|同意|允许外发|yes)$/i.test(text)) {
+        addMessage("user", text);
+        composer.value = "";
+        pendingEgress.resolve(true);
+        return;
+      }
+      if (/^(取消|不要|算了|拒绝|no|cancel)$/i.test(text)) {
+        addMessage("user", text);
+        composer.value = "";
+        pendingEgress.resolve(false);
+        return;
+      }
+    }
+
+    if (busy) return;
     addMessage("user", text);
     composer.value = "";
 

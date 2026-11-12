@@ -28,9 +28,11 @@ function normalizeWireApi(value: unknown): OpenAiWireApi {
   return value === "responses" ? "responses" : "chat_completions";
 }
 
-export function normalizeConnectionMode(value: unknown): AiConnectionMode {
-  // plugin_default is reserved; until the hosted path ships, always treat as byok.
-  return value === "plugin_default" ? "plugin_default" : "byok";
+export function normalizeConnectionMode(_value: unknown): AiConnectionMode {
+  // plugin_default is reserved in the type union for a future hosted path.
+  // Until that ships, always coerce to byok so a stale localStorage value cannot
+  // trap the panel in a non-runnable mode.
+  return "byok";
 }
 
 export type SettingsReady =
@@ -45,11 +47,13 @@ export function resolveReadySettings(
   input?: ProviderSettings,
 ): SettingsReady {
   const settings = input ?? loadSettings();
+  // connectionMode is coerced to byok on load/save; keep a defensive branch
+  // if a caller constructs settings without going through normalize.
   if (settings.connectionMode === "plugin_default") {
     return {
       ok: false,
       reason:
-        "「插件默认模型」尚未开放。请在「配置」里选「自配模型」，填写与平时一样的中转 Base URL / API Key / Model。",
+        "「插件默认模型」尚未开放。请在「配置」使用「自配模型」，填写中转 Base URL / API Key / Model。",
     };
   }
   if (!settings.baseUrl.trim() || !settings.apiKey.trim() || !settings.model.trim()) {

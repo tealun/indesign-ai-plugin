@@ -12,8 +12,8 @@ describe("normalizeConnectionMode", () => {
     assert.equal(normalizeConnectionMode("byok"), "byok");
   });
 
-  it("preserves reserved plugin_default flag", () => {
-    assert.equal(normalizeConnectionMode("plugin_default"), "plugin_default");
+  it("coerces reserved plugin_default to byok until hosted path ships", () => {
+    assert.equal(normalizeConnectionMode("plugin_default"), "byok");
   });
 });
 
