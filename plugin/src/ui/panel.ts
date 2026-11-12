@@ -8,7 +8,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.3.4";
+const PLUGIN_UI_VERSION = "0.3.5";
 
 function newId(): string {
   try {

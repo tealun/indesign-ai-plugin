@@ -298,16 +298,21 @@ export function createIndesignHost(): DocumentHost {
               /* ignore */
             }
             const table = addTableAtFrame(frame, command);
-            // Stretch table toward frame width when possible
+            const totalRows =
+              command.headerRowCount +
+              command.bodyRowCount +
+              command.footerRowCount;
+            fitFrameToTable(frame, table, totalRows, command.columnCount);
+            // Confirm the table is really parented in this frame
             try {
-              const gb = Array.from(frame.geometricBounds as number[]);
-              const width = Number(gb[3]) - Number(gb[1]);
-              const colW = width / Math.max(1, command.columnCount);
-              for (let c = 0; c < command.columnCount; c++) {
-                table.columns.item(c).width = colW;
+              if (!frame.tables || Number(frame.tables.length) < 1) {
+                return {
+                  ok: false,
+                  errorMessage: "建表后文本框内仍无表格（请检查 UXP tables.add）",
+                };
               }
             } catch {
-              /* optional */
+              /* length check optional */
             }
             ctx.created.tableId = String(table.id);
             return { ok: true, createdId: String(table.id) };
@@ -324,7 +329,7 @@ export function createIndesignHost(): DocumentHost {
                 errorMessage: `单元格 (${command.row},${command.column}) 不存在`,
               };
             }
-            cell.contents = command.text;
+            writeCellContents(cell, command.text);
             return { ok: true };
           }
           case "applyTableStyle": {
@@ -402,9 +407,40 @@ function resolveTextFrame(doc: any, id: string | number): any | null {
   return null;
 }
 
+function firstInsertionPoint(frame: any): any {
+  const ips = frame.insertionPoints;
+  if (!ips) throw new Error("文本框没有 insertionPoints，无法插入表格");
+  try {
+    if (typeof ips.item === "function") return ips.item(0);
+  } catch {
+    /* try index */
+  }
+  try {
+    if (ips[0]) return ips[0];
+  } catch {
+    /* missing */
+  }
+  throw new Error("无法取得 insertionPoints[0]");
+}
+
+function tableProps(command: {
+  columnCount: number;
+  bodyRowCount: number;
+  headerRowCount: number;
+  footerRowCount: number;
+}): Record<string, number> {
+  return {
+    columnCount: command.columnCount,
+    bodyRowCount: command.bodyRowCount,
+    headerRowCount: command.headerRowCount,
+    footerRowCount: command.footerRowCount,
+  };
+}
+
 /**
- * InDesign DOM: tables.add(columns, bodyRows, headerRows, footerRows)
- * Object-form withProperties is unreliable across versions.
+ * UXP Tables.add(LocationOptions?, reference?, withProperties?)
+ * Classic ExtendScript often used insertionPoints[0].tables.add({columnCount, bodyRowCount...}).
+ * Never pass raw numbers as the first args — that is not the UXP signature.
  */
 function addTableAtFrame(
   frame: any,
@@ -415,39 +451,117 @@ function addTableAtFrame(
     footerRowCount: number;
   },
 ): any {
-  const ips = frame.insertionPoints;
-  if (!ips) {
-    throw new Error("文本框没有 insertionPoints，无法插入表格");
-  }
-  let ip: any;
-  try {
-    ip = ips.item(0);
-  } catch (e) {
-    throw new Error(`无法取得 insertionPoints.item(0)：${String(e)}`);
-  }
-  if (!ip) throw new Error("insertionPoints.item(0) 为空");
-  if (!ip.tables) throw new Error("insertionPoint.tables 不可用");
+  const ip = firstInsertionPoint(frame);
+  const props = tableProps(command);
+  const errors: string[] = [];
 
-  try {
-    return ip.tables.add(
-      command.columnCount,
-      command.bodyRowCount,
-      command.headerRowCount,
-      command.footerRowCount,
-    );
-  } catch (ePositional) {
+  const attempts: Array<() => any> = [
+    () => ip.tables.add(props),
+    () => {
+      const idn = tryRequireIndesign() as any;
+      const loc =
+        idn?.LocationOptions?.UNKNOWN ??
+        idn?.LocationOptions?.AT_BEGINNING ??
+        idn?.LocationOptions?.AFTER;
+      if (frame.tables && loc != null) {
+        return frame.tables.add(loc, ip, props);
+      }
+      throw new Error("LocationOptions/frame.tables 不可用");
+    },
+    () => ip.tables.add(undefined, undefined, props),
+  ];
+
+  for (const attempt of attempts) {
     try {
-      return ip.tables.add({
-        columnCount: command.columnCount,
-        bodyRowCount: command.bodyRowCount,
-        headerRowCount: command.headerRowCount,
-        footerRowCount: command.footerRowCount,
-      });
-    } catch (eProps) {
-      throw new Error(
-        `tables.add 失败（positional: ${String(ePositional)}；props: ${String(eProps)}）`,
-      );
+      attempt();
+      const tables = frame.tables;
+      const len = Number(tables?.length ?? 0);
+      if (len < 1) {
+        errors.push("add 返回后 frame.tables 仍为空");
+        continue;
+      }
+      const table =
+        typeof tables.lastItem === "function"
+          ? tables.lastItem()
+          : tables.item(len - 1);
+      if (!table) {
+        errors.push("无法取得新建 table 引用");
+        continue;
+      }
+      // Ensure header/footer counts stick on hosts that ignore some props
+      try {
+        if (command.headerRowCount) table.headerRowCount = command.headerRowCount;
+        if (command.footerRowCount) table.footerRowCount = command.footerRowCount;
+      } catch {
+        /* optional */
+      }
+      return table;
+    } catch (e) {
+      errors.push(String(e));
     }
+  }
+
+  throw new Error(`tables.add 未能在文本框内建表：${errors.join(" | ")}`);
+}
+
+function fitFrameToTable(
+  frame: any,
+  table: any,
+  rowCount: number,
+  columnCount: number,
+): void {
+  try {
+    const gb = Array.from(frame.geometricBounds as number[]);
+    const top = Number(gb[0]);
+    const left = Number(gb[1]);
+    const bottom = Number(gb[2]);
+    const right = Number(gb[3]);
+    const minH = Math.max(bottom - top, rowCount * 18 + 12);
+    const minW = Math.max(right - left, columnCount * 42);
+    frame.geometricBounds = [top, left, top + minH, left + minW];
+  } catch {
+    /* optional */
+  }
+  try {
+    const width =
+      Number(frame.geometricBounds[3]) - Number(frame.geometricBounds[1]);
+    const colW = width / Math.max(1, columnCount);
+    for (let c = 0; c < columnCount; c++) {
+      table.columns.item(c).width = colW;
+    }
+  } catch {
+    /* optional */
+  }
+  try {
+    for (let r = 0; r < table.rows.length; r++) {
+      table.rows.item(r).autoGrow = true;
+    }
+  } catch {
+    /* optional */
+  }
+}
+
+function writeCellContents(cell: any, text: string): void {
+  const value = text ?? "";
+  try {
+    cell.contents = value;
+    return;
+  } catch {
+    /* try texts */
+  }
+  try {
+    const texts = cell.texts;
+    if (texts?.item) {
+      texts.item(0).contents = value;
+      return;
+    }
+  } catch {
+    /* try paragraphs */
+  }
+  try {
+    cell.paragraphs.item(0).contents = value;
+  } catch (e) {
+    throw new Error(`写入单元格失败：${String(e)}`);
   }
 }
 

@@ -1,4 +1,5 @@
 import type { Bounds, LayoutCommand, TableDraft } from "../types/protocol.js";
+import { expandBoundsForTable } from "./expandBounds.js";
 import { validateTableDraft } from "./tableDraft.js";
 import type { ProtocolError } from "../types/protocol.js";
 
@@ -35,11 +36,16 @@ export function buildTableReplaceCommands(args: {
   }
 
   const { draft, bodyRowCount, columnCount } = validated;
+  const frameBounds = expandBoundsForTable(
+    args.bounds,
+    draft.rows.length,
+    columnCount,
+  );
   const commands: LayoutCommand[] = [
     {
       type: "createTextFrame",
       pageIndex: args.pageIndex,
-      bounds: args.bounds,
+      bounds: frameBounds,
     },
     {
       type: "createTable",
