@@ -1,13 +1,19 @@
 import { extractJsonObject } from "../providers/parseJson.js";
+import type { ExperienceScope } from "./memory/types.js";
 import {
   AGENT_ACTION_TYPES,
   type AgentAction,
   type AgentActionType,
   type AgentDecision,
+  type AgentLessonDraft,
 } from "./types.js";
 
 function isActionType(v: unknown): v is AgentActionType {
   return typeof v === "string" && (AGENT_ACTION_TYPES as string[]).includes(v);
+}
+
+function isScope(v: unknown): v is ExperienceScope {
+  return v === "agent" || v === "user" || v === "project" || v === "task";
 }
 
 function parseAction(raw: unknown): AgentAction | null {
@@ -25,6 +31,21 @@ function parseAction(raw: unknown): AgentAction | null {
   if (o.type === "list_styles") return { type: "list_styles" };
   if (o.type === "open_config") return { type: "open_config" };
   return null;
+}
+
+function parseLessons(raw: unknown): AgentLessonDraft[] {
+  if (!Array.isArray(raw)) return [];
+  const out: AgentLessonDraft[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    if (!isScope(o.scope)) continue;
+    const text = String(o.text || "").trim();
+    if (!text) continue;
+    const taskId = String(o.taskId || "").trim();
+    out.push(taskId ? { scope: o.scope, text, taskId } : { scope: o.scope, text });
+  }
+  return out.slice(0, 6);
 }
 
 export function parseAgentDecision(text: string): AgentDecision {
@@ -45,5 +66,12 @@ export function parseAgentDecision(text: string): AgentDecision {
     const a = parseAction(item);
     if (a && a.type !== "none") actions.push(a);
   }
-  return { reply, actions };
+  const taskId = String(data.taskId || "").trim() || undefined;
+  const lessons = parseLessons(data.lessons);
+  return {
+    reply,
+    actions,
+    ...(taskId ? { taskId } : {}),
+    ...(lessons.length ? { lessons } : {}),
+  };
 }

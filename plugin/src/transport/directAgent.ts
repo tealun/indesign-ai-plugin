@@ -1,5 +1,5 @@
 import { parseAgentDecision } from "../agent/parseDecision.js";
-import { AGENT_SYSTEM_PROMPT, buildAgentUserPayload } from "../agent/systemPrompt.js";
+import { buildAgentSystemPrompt, buildAgentUserPayload } from "../agent/systemPrompt.js";
 import type { AgentDecision, AgentTurnPayload } from "../agent/types.js";
 import { getAdapter } from "../providers/registry.js";
 import { openAiEndpointPath } from "../providers/openaiCompatible.js";
@@ -27,7 +27,7 @@ export async function directAgentTurn(
     {
       op: "agent_turn",
       userNote: JSON.stringify({
-        system: AGENT_SYSTEM_PROMPT,
+        system: buildAgentSystemPrompt(),
         user: buildAgentUserPayload(payload),
       }),
     },

@@ -8,7 +8,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.3.0";
+const PLUGIN_UI_VERSION = "0.3.1";
 
 function newId(): string {
   try {
@@ -42,6 +42,16 @@ import { directAgentTurn } from "../transport/directAgent.js";
 import { preflightTableReplace } from "../m0t/preflight.js";
 import { validateTableDraft } from "../protocol/tableDraft.js";
 import type { AgentAction, AgentChatMessage, AgentRuntimeContext } from "../agent/types.js";
+import {
+  appendProjectDigest,
+  getOrCreateProject,
+  loadMemory,
+  memorySliceForPrompt,
+  recordTaskOutcome,
+  rememberNote,
+  saveMemory,
+} from "../agent/memory/store.js";
+import { getActiveDocumentIdentity } from "../host/documentIdentity.js";
 import { el } from "./dom.js";
 import { matchTableStyleName } from "./matchStyle.js";
 
@@ -76,8 +86,11 @@ export function mountPanel(root: HTMLElement): void {
   let draft: TableDraft | null = null;
   let tableStyles: string[] = [];
   let busy = false;
-  /** Recent turns sent to the model so it can continue context (not regex state machines). */
+  /** Per-document chat histories — never share across open files. */
+  const chatByProject = new Map<string, AgentChatMessage[]>();
+  let activeProjectKey = "no-doc";
   let history: AgentChatMessage[] = [];
+  let lastTaskId = "";
 
   const chatLog = el("div", { className: "chat-log", id: "chatLog" });
   const composer = el("textarea", {
@@ -483,6 +496,58 @@ export function mountPanel(root: HTMLElement): void {
     draft = null;
     thumb.classList.add("hidden");
     addMessage("assistant", `完成：已用样式「${styleName}」生成真表，原矢量已删除。`);
+    const mem = loadMemory();
+    recordTaskOutcome(
+      mem,
+      activeProjectKey,
+      lastTaskId || "m0t.replace_with_style",
+      true,
+      styleName,
+    );
+    appendProjectDigest(
+      mem,
+      activeProjectKey,
+      `成功用样式「${styleName}」完成真表替换`,
+    );
+  }
+
+  function syncProjectScope(): ReturnType<typeof getActiveDocumentIdentity> {
+    const id = getActiveDocumentIdentity();
+    const key = id?.key || "no-doc";
+    if (key !== activeProjectKey) {
+      chatByProject.set(activeProjectKey, history);
+      activeProjectKey = key;
+      history = chatByProject.get(key) ? [...chatByProject.get(key)!] : [];
+      const mem = loadMemory();
+      if (id) {
+        getOrCreateProject(mem, {
+          key: id.key,
+          name: id.name,
+          ...(id.path ? { path: id.path } : {}),
+        });
+        saveMemory(mem);
+        addMessage(
+          "system",
+          `已切换到文档项目：${id.name}（经验与对话与其它文档隔离）`,
+        );
+      } else {
+        addMessage("system", "当前无打开文档；经验暂存在临时空间。");
+      }
+      // Reset transient table state when document changes
+      draft = null;
+      imageDataUrl = "";
+      clearLockedSelection();
+      thumb.classList.add("hidden");
+    } else if (id) {
+      const mem = loadMemory();
+      getOrCreateProject(mem, {
+        key: id.key,
+        name: id.name,
+        ...(id.path ? { path: id.path } : {}),
+      });
+      saveMemory(mem);
+    }
+    return id;
   }
 
   function buildAgentContext(): AgentRuntimeContext {
@@ -514,7 +579,19 @@ export function mountPanel(root: HTMLElement): void {
           await doRecognize(undefined, { quiet: true });
           break;
         case "replace_table":
-          await continueWithStyle(action.styleName);
+          try {
+            await continueWithStyle(action.styleName);
+          } catch (e) {
+            const mem = loadMemory();
+            recordTaskOutcome(
+              mem,
+              activeProjectKey,
+              lastTaskId || "m0t.replace_with_style",
+              false,
+              action.styleName,
+            );
+            throw e;
+          }
           break;
         case "list_styles":
           await refreshStylesSilent();
@@ -541,11 +618,14 @@ export function mountPanel(root: HTMLElement): void {
     addMessage("user", text);
     composer.value = "";
 
+    syncProjectScope();
+
     // Local-only utilities (no model needed)
     if (/^(清空|清除对话|clear)$/i.test(text)) {
       history = [];
+      chatByProject.set(activeProjectKey, []);
       chatLog.innerHTML = "";
-      addMessage("assistant", "对话已清空。可以继续用自然语言描述你要做的事。");
+      addMessage("assistant", "当前文档的对话已清空（其它文档的经验与对话仍保留）。");
       return;
     }
 
@@ -559,18 +639,67 @@ export function mountPanel(root: HTMLElement): void {
     setBusy(true);
     try {
       await refreshStylesSilent();
-      addMessage("system", "顾问正在结合上下文理解…");
+      const id = getActiveDocumentIdentity();
+      const mem = loadMemory();
+      if (id) {
+        getOrCreateProject(mem, {
+          key: id.key,
+          name: id.name,
+          ...(id.path ? { path: id.path } : {}),
+        });
+        saveMemory(mem);
+      }
+      const experience = memorySliceForPrompt(mem, id?.key ?? null);
+      // Prefer project style in UI when empty
+      if (!styleSelect.value && experience.projectPreferredTableStyle) {
+        const hit = matchTableStyleName(
+          experience.projectPreferredTableStyle,
+          tableStyles,
+        );
+        if (hit) styleSelect.value = hit;
+      }
+
+      addMessage("system", "顾问正在结合项目经验与上下文理解…");
       const decision = await directAgentTurn(s, {
+        project: id
+          ? {
+              key: id.key,
+              name: id.name,
+              ...(id.path ? { path: id.path } : {}),
+            }
+          : null,
+        experience,
         context: buildAgentContext(),
         history,
         userMessage: text,
       });
+      lastTaskId = decision.taskId || "";
       history = [
         ...history,
         { role: "user" as const, text },
         { role: "assistant" as const, text: decision.reply },
       ].slice(-20);
-      addMessage("assistant", decision.reply);
+      chatByProject.set(activeProjectKey, history);
+
+      const taskLabel = decision.taskId ? ` · 任务 ${decision.taskId}` : "";
+      addMessage("assistant", decision.reply + (taskLabel ? `\n（${taskLabel.trim()}）` : ""));
+
+      // Persist lessons proposed by the model
+      if (decision.lessons?.length) {
+        const root = loadMemory();
+        for (const lesson of decision.lessons) {
+          rememberNote(root, {
+            scope: lesson.scope,
+            text: lesson.text,
+            ...(lesson.taskId ? { taskId: lesson.taskId } : {}),
+            ...(lesson.scope === "project" || lesson.scope === "task"
+              ? { projectKey: activeProjectKey }
+              : {}),
+          });
+        }
+        addMessage("system", `已沉淀 ${decision.lessons.length} 条经验。`);
+      }
+
       if (decision.actions.length) {
         addMessage(
           "system",
@@ -580,6 +709,10 @@ export function mountPanel(root: HTMLElement): void {
       }
     } catch (e) {
       addMessage("assistant", `出错了：${String(e)}`);
+      const mem = loadMemory();
+      if (lastTaskId) {
+        recordTaskOutcome(mem, activeProjectKey, lastTaskId, false);
+      }
     } finally {
       setBusy(false);
     }
@@ -598,10 +731,11 @@ export function mountPanel(root: HTMLElement): void {
   });
 
   void refreshStylesSilent();
+  syncProjectScope();
   addMessage(
     "assistant",
     isInDesignRuntime()
-      ? "你好。用自然语言说即可——例如「把选中的伪表转成货号信息表」。我会结合选区/识别稿/样式列表理解上下文，再执行白名单动作。模型在「配置」。"
+      ? "你好。我按「打开的文档」隔离项目经验：识别任务 → 执行已实现的程序化步骤，并沉淀 agent/用户/项目/任务经验。直接说你想做什么即可。模型在「配置」。"
       : "当前不在 InDesign 面板环境。连上宿主后即可处理真表替换。",
   );
 }

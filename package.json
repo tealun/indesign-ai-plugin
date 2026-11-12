@@ -1,6 +1,6 @@
 {
   "name": "indesign-ai-plugin",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "InDesign UXP AI panel — layout assist and vector-table recovery",
   "type": "module",
@@ -8,7 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "test": "tsx --test plugin/src/**/*.test.ts",
+    "test": "tsx --test plugin/src/**/*.test.ts plugin/src/**/**/*.test.ts",
     "check": "npm run typecheck && npm test && npm run build"
   },
   "engines": {

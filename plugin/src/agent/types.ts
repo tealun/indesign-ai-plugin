@@ -1,3 +1,5 @@
+import type { ExperienceScope, TaskStat } from "./memory/types.js";
+
 export type AgentActionType =
   | "none"
   | "lock_selection"
@@ -14,11 +16,21 @@ export type AgentAction =
   | { type: "list_styles" }
   | { type: "open_config" };
 
+export type AgentLessonDraft = {
+  scope: ExperienceScope;
+  text: string;
+  taskId?: string;
+};
+
 export type AgentDecision = {
   /** Natural-language reply shown in the chat bubble */
   reply: string;
+  /** Identified programmatic task */
+  taskId?: string;
   /** Whitelisted side effects the host may run, in order */
   actions: AgentAction[];
+  /** Experiences to persist after the turn */
+  lessons?: AgentLessonDraft[];
 };
 
 export type AgentChatMessage = {
@@ -36,7 +48,25 @@ export type AgentRuntimeContext = {
   hasPatchImage: boolean;
 };
 
+export type AgentProjectRef = {
+  key: string;
+  name: string;
+  path?: string;
+};
+
+export type AgentExperienceSlice = {
+  agentLessons: string[];
+  userLessons: string[];
+  projectLessons: string[];
+  projectPreferredTableStyle?: string;
+  taskStats: Record<string, TaskStat>;
+  recentDigests: string[];
+  projectName?: string;
+};
+
 export type AgentTurnPayload = {
+  project: AgentProjectRef | null;
+  experience: AgentExperienceSlice;
   context: AgentRuntimeContext;
   history: AgentChatMessage[];
   userMessage: string;

@@ -31,4 +31,18 @@ describe("parseAgentDecision", () => {
     }`);
     assert.equal(d.actions[0]?.type, "replace_table");
   });
+
+  it("parses taskId and lessons", () => {
+    const d = parseAgentDecision(
+      JSON.stringify({
+        reply: "写入中",
+        taskId: "m0t.replace_with_style",
+        actions: [{ type: "replace_table", styleName: "货号信息表" }],
+        lessons: [{ scope: "project", text: "本册伪表常用货号信息表", taskId: "m0t.replace_with_style" }],
+      }),
+    );
+    assert.equal(d.taskId, "m0t.replace_with_style");
+    assert.equal(d.lessons?.[0]?.scope, "project");
+  });
 });
+
