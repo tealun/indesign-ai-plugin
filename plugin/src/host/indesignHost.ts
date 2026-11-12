@@ -281,24 +281,23 @@ export function createIndesignHost(): DocumentHost {
               /* optional */
             }
             if (command.text) tf.contents = command.text;
+            ctx.created.frameId = String(tf.id);
             return { ok: true, createdId: String(tf.id) };
           }
           case "createTable": {
-            const frame = doc.pageItems.itemByID(Number(command.parentFrameId));
-            if (!frame) return { ok: false, errorMessage: "parent frame not found" };
-            // Clear and insert table at first insertion point
+            const frame = resolveTextFrame(doc, command.parentFrameId);
+            if (!frame) {
+              return {
+                ok: false,
+                errorMessage: `父文本框 ${command.parentFrameId} 不存在或不是 TextFrame`,
+              };
+            }
             try {
               frame.contents = "";
             } catch {
               /* ignore */
             }
-            const ip = frame.insertionPoints.item(0);
-            const table = ip.tables.add({
-              headerRowCount: command.headerRowCount,
-              bodyRowCount: command.bodyRowCount,
-              footerRowCount: command.footerRowCount,
-              columnCount: command.columnCount,
-            });
+            const table = addTableAtFrame(frame, command);
             // Stretch table toward frame width when possible
             try {
               const gb = Array.from(frame.geometricBounds as number[]);
@@ -315,16 +314,36 @@ export function createIndesignHost(): DocumentHost {
           }
           case "writeCellText": {
             const table = findTableById(doc, command.tableId);
-            if (!table) return { ok: false, errorMessage: `table ${command.tableId} not found` };
-            const cell = table.rows.item(command.row).cells.item(command.column);
+            if (!table) {
+              return { ok: false, errorMessage: `table ${command.tableId} not found` };
+            }
+            const cell = resolveTableCell(table, command.row, command.column);
+            if (!cell) {
+              return {
+                ok: false,
+                errorMessage: `单元格 (${command.row},${command.column}) 不存在`,
+              };
+            }
             cell.contents = command.text;
             return { ok: true };
           }
           case "applyTableStyle": {
             const table = findTableById(doc, command.tableId);
-            if (!table) return { ok: false, errorMessage: `table ${command.tableId} not found` };
-            const style = doc.tableStyles.itemByName(command.name);
-            table.appliedTableStyle = style;
+            if (!table) {
+              return { ok: false, errorMessage: `table ${command.tableId} not found` };
+            }
+            try {
+              const style = doc.tableStyles.itemByName(command.name);
+              if (!style || style.isValid === false) {
+                return { ok: false, errorMessage: `表样式不存在：${command.name}` };
+              }
+              table.appliedTableStyle = style;
+            } catch (e) {
+              return {
+                ok: false,
+                errorMessage: `应用表样式失败：${String(e)}`,
+              };
+            }
             return { ok: true };
           }
           case "removeObjects": {
@@ -364,13 +383,121 @@ export function createIndesignHost(): DocumentHost {
   };
 }
 
+/** Prefer textFrames.itemByID — pageItems often lack insertionPoints in UXP. */
+function resolveTextFrame(doc: any, id: string | number): any | null {
+  const n = Number(id);
+  if (!Number.isFinite(n)) return null;
+  try {
+    const tf = doc.textFrames.itemByID(n);
+    if (tf && tf.isValid !== false) return tf;
+  } catch {
+    /* try pageItems */
+  }
+  try {
+    const item = doc.pageItems.itemByID(n);
+    if (item && item.isValid !== false && item.insertionPoints) return item;
+  } catch {
+    /* missing */
+  }
+  return null;
+}
+
+/**
+ * InDesign DOM: tables.add(columns, bodyRows, headerRows, footerRows)
+ * Object-form withProperties is unreliable across versions.
+ */
+function addTableAtFrame(
+  frame: any,
+  command: {
+    columnCount: number;
+    bodyRowCount: number;
+    headerRowCount: number;
+    footerRowCount: number;
+  },
+): any {
+  const ips = frame.insertionPoints;
+  if (!ips) {
+    throw new Error("文本框没有 insertionPoints，无法插入表格");
+  }
+  let ip: any;
+  try {
+    ip = ips.item(0);
+  } catch (e) {
+    throw new Error(`无法取得 insertionPoints.item(0)：${String(e)}`);
+  }
+  if (!ip) throw new Error("insertionPoints.item(0) 为空");
+  if (!ip.tables) throw new Error("insertionPoint.tables 不可用");
+
+  try {
+    return ip.tables.add(
+      command.columnCount,
+      command.bodyRowCount,
+      command.headerRowCount,
+      command.footerRowCount,
+    );
+  } catch (ePositional) {
+    try {
+      return ip.tables.add({
+        columnCount: command.columnCount,
+        bodyRowCount: command.bodyRowCount,
+        headerRowCount: command.headerRowCount,
+        footerRowCount: command.footerRowCount,
+      });
+    } catch (eProps) {
+      throw new Error(
+        `tables.add 失败（positional: ${String(ePositional)}；props: ${String(eProps)}）`,
+      );
+    }
+  }
+}
+
+function resolveTableCell(table: any, row: number, column: number): any | null {
+  try {
+    const rows = table.rows;
+    if (rows && typeof rows.item === "function") {
+      const r = rows.item(row);
+      if (r?.cells && typeof r.cells.item === "function") {
+        return r.cells.item(column);
+      }
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    // Flat cells collection is 0-based left-to-right, top-to-bottom
+    const cols = Number(table.columns?.length ?? 0) || 1;
+    const index = row * cols + column;
+    if (table.cells && typeof table.cells.item === "function") {
+      return table.cells.item(index);
+    }
+  } catch {
+    /* missing */
+  }
+  return null;
+}
+
 function findTableById(doc: any, tableId: string): any | null {
-  // Tables are not always pageItems; search stories/textFrames
+  // Tables live in stories, not always as pageItems
   try {
     const stories = doc.stories;
     for (let s = 0; s < stories.length; s++) {
       const story = stories.item(s);
       const tables = story.tables;
+      for (let t = 0; t < tables.length; t++) {
+        const table = tables.item(t);
+        if (String(table.id) === String(tableId)) return table;
+      }
+    }
+  } catch {
+    /* continue */
+  }
+  // Also scan textFrames directly (some UXP builds)
+  try {
+    const frames = doc.textFrames;
+    for (let i = 0; i < frames.length; i++) {
+      const tf = frames.item(i);
+      const tables = tf.tables;
+      if (!tables) continue;
       for (let t = 0; t < tables.length; t++) {
         const table = tables.item(t);
         if (String(table.id) === String(tableId)) return table;
