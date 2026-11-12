@@ -3,7 +3,7 @@ import { loadSettings, maskApiKey, saveSettings } from "../settings/store.js";
 import type { ProviderSettings, ProviderType, TableDraft } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.2.3";
+const PLUGIN_UI_VERSION = "0.2.4";
 
 import { runCommandBatch } from "../executor/runBatch.js";
 import { buildTableReplaceCommands } from "../protocol/buildTableReplaceCommands.js";
@@ -57,11 +57,8 @@ export function mountPanel(root: HTMLElement): void {
   let draft: TableDraft | null = null;
   let tableStyles: string[] = [];
   let busy = false;
-  /** UXP has no window.confirm — confirm in chat instead. */
-  let pending:
-    | null
-    | { type: "recognize"; note?: string }
-    | { type: "replace"; styleName: string } = null;
+  /** UXP has no window.confirm — only destructive replace asks in chat. */
+  let pending: null | { type: "replace"; styleName: string } = null;
 
   const chatLog = el("div", { className: "chat-log", id: "chatLog" });
   const composer = el("textarea", {
@@ -286,7 +283,7 @@ export function mountPanel(root: HTMLElement): void {
     );
   }
 
-  async function requestRecognize(note?: string): Promise<void> {
+  async function doRecognize(note?: string): Promise<void> {
     const locked = getLockedSelection();
     if (!locked) {
       addMessage("assistant", "还没有锁定选区。先说「读取选区」。");
@@ -298,21 +295,7 @@ export function mountPanel(root: HTMLElement): void {
       switchTab("config");
       return;
     }
-    pending = note ? { type: "recognize", note } : { type: "recognize" };
-    addMessage(
-      "assistant",
-      `识别需要把选区图像发送到：\n${s.baseUrl}\n\n回复「确认」继续，或「取消」。`,
-    );
-  }
-
-  async function runRecognize(note?: string): Promise<void> {
-    const locked = getLockedSelection();
-    if (!locked) {
-      addMessage("assistant", "选区已失效，请重新「读取选区」。");
-      return;
-    }
-    const s = loadSettings();
-    addMessage("assistant", "正在导出选区并识别…");
+    addMessage("assistant", `正在导出选区并识别（发送至 ${s.baseUrl}）…`);
     if (!imageDataUrl) {
       const cap = await exportSelectionPng();
       if (!cap.dataUrl) {
@@ -437,7 +420,7 @@ export function mountPanel(root: HTMLElement): void {
       if (pending && intent.kind !== "confirm" && intent.kind !== "cancel") {
         addMessage(
           "assistant",
-          `还有待确认的操作。请先回复「确认」或「取消」（当前：${pending.type === "recognize" ? "外发识别" : "替换真表"}）。`,
+          "还有待确认的替换。请先回复「确认」或「取消」。",
         );
         return;
       }
@@ -451,8 +434,7 @@ export function mountPanel(root: HTMLElement): void {
           {
             const job = pending;
             pending = null;
-            if (job.type === "recognize") await runRecognize(job.note);
-            else await runReplace(job.styleName);
+            await runReplace(job.styleName);
           }
           break;
         case "cancel":
@@ -466,7 +448,7 @@ export function mountPanel(root: HTMLElement): void {
         case "help":
           addMessage(
             "assistant",
-            "可以这样说：\n· 读取选区\n· 识别表格\n· 用「样式名」替换 / 替换为真表\n· 确认 / 取消（外发与替换前）\n· 有哪些表样式\n· 配置\n\n流程：选中矢量表 → 读取 → 识别 → 选样式 → 替换。",
+            "可以这样说：\n· 读取选区\n· 识别表格\n· 用「样式名」替换 / 替换为真表\n· 确认 / 取消（仅替换前）\n· 有哪些表样式\n· 配置\n\n流程：选中矢量表 → 读取 → 识别 → 选样式 → 替换。",
           );
           break;
         case "config":
@@ -499,7 +481,7 @@ export function mountPanel(root: HTMLElement): void {
           await doLock();
           break;
         case "recognize":
-          await requestRecognize(intent.note);
+          await doRecognize(intent.note);
           break;
         case "replace":
           await requestReplace(intent.styleName);
