@@ -9,6 +9,7 @@ InDesign AI 插件的权威文档入口。实现与改动前先读对应域的�
 | Product goals / non-goals | [`00_core/00_01_PRD.md`](00_core/00_01_PRD.md) |
 | Architecture / stack / modules | [`00_core/00_02_Architecture.md`](00_core/00_02_Architecture.md) |
 | AI providers / config | [`00_core/00_03_AI_Providers.md`](00_core/00_03_AI_Providers.md) |
+| AI connection modes (BYOK first) | [`00_core/00_07_AI_Connection.md`](00_core/00_07_AI_Connection.md) |
 | JSON command protocol | [`00_core/00_04_JSON_Protocol.md`](00_core/00_04_JSON_Protocol.md) |
 | Local setup | [`00_core/00_05_Setup_Guide.md`](00_core/00_05_Setup_Guide.md) |
 | Tech stack | [`00_core/00_06_Tech_Stack.md`](00_core/00_06_Tech_Stack.md) |

@@ -4,6 +4,8 @@
 
 面板可配置接入主流模型与中转站；业务层不绑定单一厂商。
 
+**连接方式（本期）**：只跑通 **自配模型（BYOK）**——用户自填 Base URL / API Key / Model，与日常中转配置相同。插件默认模型通道预留，见 [`00_07_AI_Connection.md`](00_07_AI_Connection.md)。
+
 ## Built-in Provider Types
 
 | Type id | Covers | Protocol notes |
@@ -19,12 +21,14 @@
 
 ```json
 {
+  "connectionMode": "byok",
   "provider": "openai_compatible",
   "baseUrl": "https://example-relay.example/v1",
   "apiKey": "<local-only>",
   "model": "gpt-4.1",
   "timeoutMs": 60000,
-  "temperature": 0.2
+  "temperature": 0.2,
+  "wireApi": "chat_completions"
 }
 ```
 

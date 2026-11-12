@@ -8,6 +8,7 @@ describe("formatProviderHttpError", () => {
       404,
       '{"error":{"message":"model_not_found"}}',
       {
+        connectionMode: "byok",
         provider: "openai_compatible",
         baseUrl: "https://www.api.web3-ai.club/v1",
         apiKey: "sk-test",
