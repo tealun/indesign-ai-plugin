@@ -56,7 +56,7 @@ export const SKILL_REGISTRY: AgentSkill[] = [
     title: "比对不盲写",
     agents: ["*", "m0.copy_compare"],
     tags: ["compare"],
-    body: `文稿比对只产出增删改清单与定位线索；在用户明确要求且具备白名单写回动作之前，不声称已改版面。`,
+    body: `对照稿可来自「上传对照稿」（compareDocumentText：txt/doc/docx/xls/xlsx/pdf 等）、对话粘贴或剪贴板。比对只产出增删改清单与定位线索；在用户明确要求且具备白名单写回动作之前，不声称已改版面。扫描件 PDF / 旧版 .doc 抽字可能不全时要说明。`,
   },
   {
     id: "skill.proof_list_format",
