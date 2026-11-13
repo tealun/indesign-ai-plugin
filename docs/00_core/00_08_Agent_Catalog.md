@@ -38,12 +38,23 @@
 - 任务目录：`plugin/src/agent/tasks.ts`
 - 动作白名单：`plugin/src/agent/types.ts` + `parseDecision.ts`
 - 面板场景：`plugin/src/ui/panel.ts`
+- 选区文本：`plugin/src/host/extractText.ts`（框/表/单元格 → `storyText`）
+- 剪贴板：`plugin/src/host/clipboard.ts`（比对读入；GREP 一键复制）
+
+## Host deepening（0.4.4）
+
+| Agent | 宿主能力 |
+| --- | --- |
+| 贴表规范化 | `apply_table_style`：选区 Table / Cell 上溯 / 框内 nested tables |
+| 文稿比对 | 无 lock 时读 live 选区文本；`clipboardText` 作对照稿备选 |
+| 文章校对 | 同上 live `selectionText` |
+| GREP 助手 | `propose_grep` 气泡提供「复制查找式 / 替换式」 |
 
 ## Acceptance（本期）
 
 1. Agent 列表可见上述专属项（不含溢出/缺图）。  
 2. 点选后回对话并显示场景栏；可「退出到默认」。  
 3. 各 Agent 仅能发射自身 `allowedActions`。  
-4. GREP 助手能产出可复制的查找表达式（`propose_grep`）。  
-5. 贴表规范化在选中真表时可 `apply_table_style`。  
+4. GREP 助手能产出可复制的查找表达式（`propose_grep` + 一键复制）。  
+5. 贴表规范化在选中真表（含单元格）时可 `apply_table_style`。  
 6. 比对 / 校对以对话报告为主；不假装已实现全自动覆写全书。

@@ -55,6 +55,8 @@ export type AgentRuntimeContext = {
   selectionSummary: string;
   /** Concatenated story/cell text from locked or live selection (truncated). */
   selectionText: string;
+  /** Clipboard plain text (compare agent / optional). */
+  clipboardText: string;
   hasDraft: boolean;
   /** True when draft exists — replace must NOT re-run vision. */
   readyToReplace: boolean;

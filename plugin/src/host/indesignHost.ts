@@ -6,6 +6,7 @@ import { CAPTURE_MAX_EDGE, CAPTURE_TARGET_PPI } from "../capture/limits.js";
 import { readPngSize } from "../capture/pngSize.js";
 import { withTimeout } from "../util/timeout.js";
 import { isImageLikeItem, resolveToCropFrame, uniqueResolvedTargets } from "./resolveCropFrame.js";
+import { extractIndesignItemText } from "./extractText.js";
 
 function getApp(): any {
   const mod = tryRequireIndesign();
@@ -51,17 +52,17 @@ function classifyItem(item: any): SelectionItem["type"] {
 function toSelectionItem(raw: any): SelectionItem {
   const resolved = resolveToCropFrame(raw);
   const item = resolved.target;
-  const bounds = boundsFromGeometric(Array.from(item.geometricBounds as number[]));
-  const id = String(item.id);
+  let bounds: Bounds;
+  try {
+    bounds = boundsFromGeometric(Array.from(item.geometricBounds as number[]));
+  } catch {
+    bounds = { x: 0, y: 0, w: 10, h: 10, unit: "pt" };
+  }
+  const id = String(item.id ?? `tmp-${Math.random().toString(16).slice(2)}`);
   const type = classifyItem(item);
+  const storyText = extractIndesignItemText(item, 5000);
   if (type === "textFrame") {
-    let storyText = "";
-    try {
-      storyText = String(item.contents ?? "").slice(0, 5000);
-    } catch {
-      storyText = "";
-    }
-    return { id, type, bounds, storyText };
+    return { id, type, bounds, ...(storyText ? { storyText } : {}) };
   }
   if (type === "group") {
     let childCount = 0;
@@ -70,7 +71,13 @@ function toSelectionItem(raw: any): SelectionItem {
     } catch {
       childCount = 0;
     }
-    return { id, type, bounds, childCount };
+    return {
+      id,
+      type,
+      bounds,
+      childCount,
+      ...(storyText ? { storyText } : {}),
+    };
   }
   if (resolved.liftedFromImage && resolved.imageId) {
     return {
@@ -91,7 +98,14 @@ function toSelectionItem(raw: any): SelectionItem {
       notes: "未能找到裁切图框，将按媒体对象本身导出",
     };
   }
-  return { id, type: "graphic", bounds, role: "frame" };
+  // Tables / other: keep any harvested text for compare/proof agents
+  return {
+    id,
+    type: "graphic",
+    bounds,
+    role: "frame",
+    ...(storyText ? { storyText } : {}),
+  };
 }
 
 export function unionBounds(items: SelectionItem[]): Bounds {
@@ -193,9 +207,21 @@ export async function applyTableStyleToSelection(
     if (!item) return;
     try {
       const ctor = String(item.constructor?.name || item.constructorName || "");
-      if (/table/i.test(ctor) || item.columns) {
+      if (/^table$/i.test(ctor) || (item.columns && item.rows)) {
         pushTable(item);
         return;
+      }
+      // Cell → walk up to Table
+      if (/cell/i.test(ctor)) {
+        let p = item.parent;
+        for (let i = 0; i < 4 && p; i++) {
+          const pn = String(p.constructor?.name || "");
+          if (/table/i.test(pn) || (p.columns && p.rows)) {
+            pushTable(p);
+            return;
+          }
+          p = p.parent;
+        }
       }
     } catch {
       /* continue */

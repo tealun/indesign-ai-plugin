@@ -38,6 +38,8 @@ export type SelectionItem =
       bounds: Bounds;
       childCount?: number;
       notes?: string;
+      /** Harvested plain text when group contains frames/tables */
+      storyText?: string;
     }
   | {
       id: string;
@@ -48,6 +50,8 @@ export type SelectionItem =
       /** When id is a frame lifted from an inner Image selection */
       normalizedFromImageId?: string;
       notes?: string;
+      /** Harvested text when selection is a Table/Cell or similar */
+      storyText?: string;
     };
 
 export type DocumentSnapshot = {

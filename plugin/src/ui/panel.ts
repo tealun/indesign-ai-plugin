@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.3";
+const PLUGIN_UI_VERSION = "0.4.4";
 
 function newId(): string {
   try {
@@ -37,6 +37,7 @@ import {
   lockSelection,
   selectionSummary,
 } from "../host/session.js";
+import { readClipboardText, writeClipboardText } from "../host/clipboard.js";
 import {
   applyTableStyleToSelection,
   createIndesignHost,
@@ -885,7 +886,7 @@ export function mountPanel(root: HTMLElement): void {
       .slice(0, 8000);
   }
 
-  function buildAgentContext(): AgentRuntimeContext {
+  async function buildAgentContext(): Promise<AgentRuntimeContext> {
     const locked = getLockedSelection();
     const preview = draft
       ? draft.rows
@@ -893,10 +894,36 @@ export function mountPanel(root: HTMLElement): void {
           .map((r) => r.join(" | "))
           .join("\n")
       : "";
+    let selectionText = selectionTextFromSnapshot(locked?.snapshot ?? null);
+    let summary = locked ? selectionSummary(locked.snapshot.selection) : "";
+    // Live selection fallback — compare/proof often run without explicit lock
+    if (!selectionText && isInDesignRuntime()) {
+      try {
+        const live = await readSelectionSnapshot();
+        selectionText = selectionTextFromSnapshot(live);
+        if (!summary && live.selection.length) {
+          summary = selectionSummary(live.selection);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    let clipboardText = "";
+    if (
+      activeAgentId === "m0.copy_compare" ||
+      activeAgentId === DEFAULT_AGENT_ID
+    ) {
+      try {
+        clipboardText = await readClipboardText();
+      } catch {
+        clipboardText = "";
+      }
+    }
     return {
       selectionLocked: Boolean(locked),
-      selectionSummary: locked ? selectionSummary(locked.snapshot.selection) : "",
-      selectionText: selectionTextFromSnapshot(locked?.snapshot ?? null),
+      selectionSummary: summary,
+      selectionText,
+      clipboardText,
       hasDraft: Boolean(draft),
       readyToReplace: Boolean(draft),
       draftPreview: preview,
@@ -1022,10 +1049,39 @@ export function mountPanel(root: HTMLElement): void {
             "【InDesign GREP · 可复制到查找/更改】",
             `查找：${action.find}`,
           ];
-          if (action.changeTo) lines.push(`替换为：${action.changeTo}`);
+          if (action.changeTo !== undefined) {
+            lines.push(`替换为：${action.changeTo}`);
+          }
           if (action.flags) lines.push(`选项：${action.flags}`);
           if (action.note) lines.push(`说明：${action.note}`);
-          addMessage("assistant", lines.join("\n"));
+          const actionsRow = el("div", { className: "chips" });
+          const copyFind = el("div", { className: "chip", role: "button" }, [
+            "复制查找式",
+          ]);
+          copyFind.addEventListener("click", () => {
+            void writeClipboardText(action.find).then((ok) => {
+              addMessage(
+                "system",
+                ok ? "查找式已复制到剪贴板。" : "复制失败，请手动选中上方查找式。",
+              );
+            });
+          });
+          actionsRow.append(copyFind);
+          if (action.changeTo !== undefined) {
+            const copyRep = el("div", { className: "chip", role: "button" }, [
+              "复制替换式",
+            ]);
+            copyRep.addEventListener("click", () => {
+              void writeClipboardText(action.changeTo || "").then((ok) => {
+                addMessage(
+                  "system",
+                  ok ? "替换式已复制到剪贴板。" : "复制失败，请手动选中。",
+                );
+              });
+            });
+            actionsRow.append(copyRep);
+          }
+          addMessage("assistant", lines.join("\n"), actionsRow);
           break;
         }
         case "open_config":
@@ -1126,7 +1182,7 @@ export function mountPanel(root: HTMLElement): void {
             }
           : null,
         experience,
-        context: buildAgentContext(),
+        context: await buildAgentContext(),
         history,
         userMessage: text,
       });

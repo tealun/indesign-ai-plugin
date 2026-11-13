@@ -30,7 +30,7 @@
 
 **允许 actions**：`lock_selection` | `open_config`
 
-**行为**：用户粘贴对照稿；模型对照 `runtimeContext.selectionText` 输出增删改列表。本期**不**自动写回文档（避免毁样式）。
+**行为**：对照稿优先来自对话粘贴，其次 `runtimeContext.clipboardText`；版面侧为 `selectionText`（锁定选区或 live 选区，含表 TSV）。模型输出增删改列表。本期**不**自动写回文档（避免毁样式）。
 
 **验收**：有对照稿 + 选区文本时回复含结构化差异说明；不发射未实现的写文档动作。
 
@@ -50,9 +50,9 @@
 
 **允许 actions**：`propose_grep` | `open_config`
 
-**行为**：口语 → InDesign GREP；`propose_grep` 在对话中展示查找式/替换式/说明。样式面板写入 GREP Style = 后续里程碑。
+**行为**：口语 → InDesign GREP；`propose_grep` 在对话中展示查找式/替换式/说明，并提供复制到系统剪贴板的芯片。样式面板写入 GREP Style = 后续里程碑。
 
-**验收**：用户描述规则后出现可复制的 GREP；不声称已写入文档样式除非宿主动作存在。
+**验收**：用户描述规则后出现可复制的 GREP（含一键复制）；不声称已写入文档样式除非宿主动作存在。
 
 ## Non-goals（本规格）
 
