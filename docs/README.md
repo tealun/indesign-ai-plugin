@@ -22,6 +22,7 @@ InDesign AI 插件的权威文档入口。实现与改动前先读对应域的�
 | Planning readiness (M0-T) | [`99_audits/99_02_m0t_planning_readiness.md`](99_audits/99_02_m0t_planning_readiness.md) |
 | Planning audit | [`99_audits/99_03_planning_audit.md`](99_audits/99_03_planning_audit.md) |
 | Deep planning audit (latest) | [`99_audits/99_04_deep_planning_audit.md`](99_audits/99_04_deep_planning_audit.md) |
+| Security / isolation / UX audit | [`99_audits/99_06_security_isolation_ux_audit.md`](99_audits/99_06_security_isolation_ux_audit.md) |
 | Decisions / assumptions | [`88_planning/88_02_Planning_Ledgers.md`](88_planning/88_02_Planning_Ledgers.md) |
 
 ## Maintenance Rules

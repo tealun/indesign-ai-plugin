@@ -1,5 +1,11 @@
 # Evolution Ledger
 
+## 2026-11-13 — 安全/隔离审计 + 界面啰嗦
+
+- **Findings**: 切文档时 chat-log 串台；`documentPath` 进 localStorage；对话堆满步骤旁白。
+- **Fix**: 切文档重建对话；不落盘/不外发 path；文案只保留结果与决策点（审计见 `99_06`）。
+- **Guardrail**: UI 不说「系统正在准备什么」；多文档必须视觉隔离；文件系统路径不得进 memory/模型载荷。
+
 ## 2026-11-13 — 外发确认回显 URL/端口泄密
 
 - **Symptom**: 确认外发文案与识图进度把完整 Base URL / host 打进对话，截图或以后官方托管会暴露基础设施。

@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.3";
+const PLUGIN_UI_VERSION = "0.4.4";
 
 function newId(): string {
   try {
@@ -213,7 +213,7 @@ export function mountPanel(root: HTMLElement): void {
 
       addMessage(
         "assistant",
-        "选区图/补图将发往你在「配置」里选用的识图通道（对话不展示服务地址）。请点下方「确认外发」或「取消」。同一次会话通常只需确认一次；可到「配置」核对端点。",
+        "选区图将发往当前识图通道。确认外发，或取消。",
       );
     });
   }
@@ -254,16 +254,10 @@ export function mountPanel(root: HTMLElement): void {
     updateStyleSelectHint();
     const current = (styleSelect.value || "").trim();
     if (current) {
-      addMessage(
-        "assistant",
-        `当前表样式是「${current}」。若要用它落地，点「替换为真表」；或在下方改选其它样式（改选会自动记入对话并继续）。`,
-      );
+      addMessage("assistant", `表样式「${current}」。点「替换为真表」或改选样式。`);
       return;
     }
-    addMessage(
-      "assistant",
-      "还差一步：请在下方「表样式」下拉框里选一个文档样式。\n选好后会自动当作你的回复并继续替换，不必再记口令。",
-    );
+    addMessage("assistant", "请选择表样式，再点「替换为真表」。");
     try {
       styleSelect.focus();
     } catch {
@@ -294,13 +288,11 @@ export function mountPanel(root: HTMLElement): void {
     ),
   );
   configView.append(
-    el("p", { className: "lede" }, [
-      "当前仅开放「自配模型」：填写 Base URL / API Key / Model（与日常中转相同）。「插件默认模型」通道已预留、尚未上线，故不提供选项。",
-    ]),
+    el("p", { className: "lede" }, ["填写 Base URL / API Key / Model。"]),
     el("label", {}, [
       "连接方式",
       el("select", { id: "connectionMode" }, [
-        el("option", { value: "byok", selected: "selected" }, ["自配模型（当前可用）"]),
+        el("option", { value: "byok", selected: "selected" }, ["自配模型"]),
       ]),
     ]),
     el("label", {}, ["Provider", el("select", { id: "provider" }, providerOptions)]),
@@ -373,10 +365,10 @@ export function mountPanel(root: HTMLElement): void {
       ]),
     ]),
     el("p", { className: "lede" }, [
-      "若 Codex/中转是 wire_api=responses，Wire API 必须选 Responses，否则会打到 /chat/completions 并 404。",
+      "Codex 类中转请将 Wire API 设为 Responses。",
     ]),
     el("div", { id: "saveConfig", className: "ctl ctl-primary", role: "button" }, [
-      "保存自配",
+      "保存",
     ]),
   );
 
@@ -408,9 +400,7 @@ export function mountPanel(root: HTMLElement): void {
   ]);
 
   agentsView.append(
-    el("p", { className: "lede" }, [
-      "选择一个 Agent 后将回到对话首屏，并切换到该 Agent 的场景。以后可按需增加更多专属能力。",
-    ]),
+    el("p", { className: "lede" }, ["选择 Agent 后回到对话。"]),
     agentsList,
   );
 
@@ -473,9 +463,7 @@ export function mountPanel(root: HTMLElement): void {
     recommendBar.classList.remove("hidden");
     const sorted = sortAgentsByUsage(listSpecializedAgents());
     recommendBar.append(
-      el("div", { className: "recommend-title" }, [
-        "需要专属能力时，可加载 Agent（或打开上方「Agent」列表）：",
-      ]),
+      el("div", { className: "recommend-title" }, ["专属 Agent"]),
     );
     const row = el("div", { className: "recommend-row" });
     for (const a of sorted) {
@@ -565,17 +553,10 @@ export function mountPanel(root: HTMLElement): void {
     renderAgentChrome();
     switchTab("chat");
     if (opts?.announce) {
-      if (agent.specialized) {
-        addMessage(
-          "assistant",
-          `已进入「${agent.name}」场景。${agent.description}\n直接用自然语言说明即可；需要换 Agent 时打开上方「Agent」或点「退出到默认」。`,
-        );
-      } else {
-        addMessage(
-          "assistant",
-          "已回到默认顾问。版面专属任务请到「Agent」列表加载。",
-        );
-      }
+      addMessage(
+        "assistant",
+        agent.specialized ? `已加载「${agent.name}」。` : "已回到默认对话。",
+      );
     }
   }
 
@@ -597,10 +578,7 @@ export function mountPanel(root: HTMLElement): void {
     if (nextBase !== prevBase) {
       egressAllowedBaseUrl = "";
     }
-    addMessage(
-      "system",
-      `配置已保存：自配模型 · ${next.provider} · wire=${next.wireApi || "chat_completions"} · model=${next.model || "（空）"} · key=${maskApiKey(next.apiKey)}`,
-    );
+    addMessage("system", "配置已保存。");
     switchTab("chat");
   });
 
@@ -610,7 +588,7 @@ export function mountPanel(root: HTMLElement): void {
     const reader = new FileReader();
     reader.onload = () => {
       imageDataUrl = String(reader.result || "");
-      addImageMessage("已载入补图（将用于识别）。", imageDataUrl);
+      addImageMessage("补图", imageDataUrl);
     };
     reader.readAsDataURL(file);
   });
@@ -618,7 +596,7 @@ export function mountPanel(root: HTMLElement): void {
   async function doLock(): Promise<void> {
     const snapshot = await readSelectionSnapshot();
     if (snapshot.selection.length === 0) {
-      addMessage("assistant", "当前没有选区。请先在页面上选中矢量伪表组合，再让我读取。");
+      addMessage("assistant", "没有选区。请先选中伪表再读取。");
       return;
     }
     const ub = unionBounds(snapshot.selection);
@@ -626,12 +604,7 @@ export function mountPanel(root: HTMLElement): void {
     await refreshStylesSilent();
     addMessage(
       "assistant",
-      (() => {
-        const notes = snapshot.selection
-          .map((s) => (s.type === "graphic" ? s.notes : undefined))
-          .filter(Boolean);
-        return `已锁定选区：${selectionSummary(snapshot.selection)}\n页面 ${snapshot.pageIndex + 1} · ${ub.w.toFixed(1)}×${ub.h.toFixed(1)} pt${notes.length ? `\n${notes.join("\n")}` : ""}\n下一步可以说「识别表格」。`;
-      })(),
+      `已锁定：${selectionSummary(snapshot.selection)} · 页 ${snapshot.pageIndex + 1}`,
     );
   }
 
@@ -641,7 +614,7 @@ export function mountPanel(root: HTMLElement): void {
   ): Promise<boolean> {
     const locked = getLockedSelection();
     if (!locked) {
-      addMessage("assistant", "还没有锁定选区。先说「读取选区」或「转成表格」。");
+      addMessage("assistant", "还没有锁定选区。");
       return false;
     }
     const ready = resolveReadySettings();
@@ -653,7 +626,6 @@ export function mountPanel(root: HTMLElement): void {
     const s = ready.settings;
 
     if (!imageDataUrl) {
-      addMessage("assistant", "① 正在导出选区图…");
       const cap = await exportSelectionPng();
       if (!cap.dataUrl) {
         addMessage("assistant", `导出失败：${cap.warnings.join("；") || "无图像"}`);
@@ -663,19 +635,16 @@ export function mountPanel(root: HTMLElement): void {
       if (cap.warnings.length) {
         addMessage("system", cap.warnings.join("；"));
       }
-      addImageMessage("选区图已导出，将据此识别表格。", imageDataUrl);
+      addImageMessage("选区图", imageDataUrl);
     }
 
     const egressOk = await ensureImageEgressAllowed(s.baseUrl);
     if (!egressOk) {
-      addMessage("assistant", "已取消外发，未调用模型。需要识别时再说「识别表格」或「确认外发」。");
+      addMessage("assistant", "已取消外发。");
       return false;
     }
 
-    addMessage(
-      "assistant",
-      `② 正在调用模型识别（${s.model} · ${s.wireApi === "responses" ? "Responses" : "ChatCompletions"}，超时 ${Math.round(s.timeoutMs / 1000)}s）…`,
-    );
+    addMessage("assistant", "识别中…");
     draft = await directRecoverTable(s, {
       op: "recover_table",
       snapshot: locked.snapshot,
@@ -730,12 +699,12 @@ export function mountPanel(root: HTMLElement): void {
   async function continueWithStyle(styleName: string): Promise<void> {
     const name = resolveStyleName(styleName);
     if (!name) {
-      addMessage("assistant", `没找到表样式「${styleName}」。可以说「有哪些表样式」。`);
+      addMessage("assistant", `没有表样式「${styleName}」。`);
       return;
     }
     styleSelect.value = name;
     if (!draft || !getLockedSelection()) {
-      addMessage("assistant", "当前没有可用的识别结果/选区，请再说「转成表格」。");
+      addMessage("assistant", "缺少识别结果或选区。");
       return;
     }
     const host = getHost();
@@ -747,17 +716,16 @@ export function mountPanel(root: HTMLElement): void {
       host,
     });
     if (!pre.ok) {
-      addMessage("assistant", `预检未通过（未改文档）：${pre.error.message}`);
+      addMessage("assistant", `预检未通过：${pre.error.message}`);
       return;
     }
-    addMessage("assistant", `已接上：用样式「${name}」写入真表（可 Undo）…`);
     await runReplace(name);
   }
 
   async function runReplace(styleName: string): Promise<void> {
     const locked = getLockedSelection();
     if (!locked || !draft) {
-      addMessage("assistant", "状态已变化，请重新识别后再替换。");
+      addMessage("assistant", "状态已变，请重新识别。");
       return;
     }
     const built = buildTableReplaceCommands({
@@ -771,7 +739,7 @@ export function mountPanel(root: HTMLElement): void {
       addMessage("assistant", `无法生成指令：${built.error.message}`);
       return;
     }
-    addMessage("assistant", "③ 正在写入真表…");
+    addMessage("assistant", "写入中…");
     const report = await runCommandBatch({
       requestId: newId(),
       commands: built.commands,
@@ -779,17 +747,14 @@ export function mountPanel(root: HTMLElement): void {
     });
     if (!report.ok) {
       const err = report.results.find((r) => !r.ok)?.error?.message || "未知错误";
-      addMessage(
-        "assistant",
-        `替换未完成：${err}\n原矢量应仍在；可用 Undo 清理残留。`,
-      );
+      addMessage("assistant", `替换失败：${err}（可用 Undo）`);
       return;
     }
     clearLockedSelection();
     imageDataUrl = "";
     draft = null;
     updateStyleSelectHint();
-    addMessage("assistant", `完成：已用样式「${styleName}」生成真表，原矢量已删除。`);
+    addMessage("assistant", `完成：已用「${styleName}」生成真表。`);
     const mem = loadMemory();
     recordTaskOutcome(
       mem,
@@ -805,6 +770,14 @@ export function mountPanel(root: HTMLElement): void {
     );
   }
 
+  /** Rebuild chat-log for the active document so UI never mixes projects. */
+  function renderHistoryChat(): void {
+    chatLog.innerHTML = "";
+    for (const m of history) {
+      addMessage(m.role === "user" ? "user" : "assistant", m.text);
+    }
+  }
+
   function syncProjectScope(): ReturnType<typeof getActiveDocumentIdentity> {
     const id = getActiveDocumentIdentity();
     const key = id?.key || "no-doc";
@@ -814,30 +787,16 @@ export function mountPanel(root: HTMLElement): void {
       history = chatByProject.get(key) ? [...chatByProject.get(key)!] : [];
       const mem = loadMemory();
       if (id) {
-        getOrCreateProject(mem, {
-          key: id.key,
-          name: id.name,
-          ...(id.path ? { path: id.path } : {}),
-        });
+        getOrCreateProject(mem, { key: id.key, name: id.name });
         saveMemory(mem);
-        addMessage(
-          "system",
-          `已切换到文档项目：${id.name}（经验与对话与其它文档隔离）`,
-        );
-      } else {
-        addMessage("system", "当前无打开文档；经验暂存在临时空间。");
       }
-      // Reset transient table state when document changes
       draft = null;
       imageDataUrl = "";
       clearLockedSelection();
+      renderHistoryChat();
     } else if (id) {
       const mem = loadMemory();
-      getOrCreateProject(mem, {
-        key: id.key,
-        name: id.name,
-        ...(id.path ? { path: id.path } : {}),
-      });
+      getOrCreateProject(mem, { key: id.key, name: id.name });
       saveMemory(mem);
     }
     return id;
@@ -888,28 +847,12 @@ export function mountPanel(root: HTMLElement): void {
         next = [...next, { type: "replace_table", styleName: style }];
       }
     }
-    if (next.length !== actions.length) {
-      addMessage(
-        "system",
-        "已有识别结果：跳过重新识图，只执行替换。",
-      );
-    }
     return next;
   }
 
   function filterActionsForAgent(actions: AgentAction[]): AgentAction[] {
     const allowed = new Set(getAgent(activeAgentId).allowedActions);
-    const next = actions.filter((a) => allowed.has(a.type));
-    if (next.length !== actions.length) {
-      addMessage(
-        "system",
-        `已忽略当前 Agent 不允许的动作（${actions
-          .filter((a) => !allowed.has(a.type))
-          .map((a) => a.type)
-          .join(", ")}）。`,
-      );
-    }
-    return next;
+    return actions.filter((a) => allowed.has(a.type));
   }
 
   async function executeAgentActions(actions: AgentAction[]): Promise<void> {
@@ -920,7 +863,6 @@ export function mountPanel(root: HTMLElement): void {
           break;
         case "recognize_table": {
           if (draft) {
-            addMessage("system", "识别稿已在，跳过重复识图。");
             break;
           }
           const recognized = await doRecognize(undefined, { quiet: true });
@@ -980,10 +922,7 @@ export function mountPanel(root: HTMLElement): void {
       }
       addMessage("user", text);
       composer.value = "";
-      addMessage(
-        "assistant",
-        "请先点下方「确认外发」或「取消」（也可直接回复确认/取消）。选区图尚未外发。",
-      );
+      addMessage("assistant", "请先确认或取消外发。");
       return;
     }
 
@@ -998,7 +937,7 @@ export function mountPanel(root: HTMLElement): void {
       history = [];
       chatByProject.set(activeProjectKey, []);
       chatLog.innerHTML = "";
-      addMessage("assistant", "当前文档的对话已清空（其它文档的经验与对话仍保留）。");
+      addMessage("assistant", "已清空。");
       return;
     }
 
@@ -1021,11 +960,7 @@ export function mountPanel(root: HTMLElement): void {
       const id = getActiveDocumentIdentity();
       const mem = loadMemory();
       if (id) {
-        getOrCreateProject(mem, {
-          key: id.key,
-          name: id.name,
-          ...(id.path ? { path: id.path } : {}),
-        });
+        getOrCreateProject(mem, { key: id.key, name: id.name });
         saveMemory(mem);
       }
       const experience = memorySliceForPrompt(mem, id?.key ?? null);
@@ -1042,19 +977,9 @@ export function mountPanel(root: HTMLElement): void {
         if (hit) styleSelect.value = hit;
       }
 
-      addMessage(
-        "system",
-        `「${getAgent(activeAgentId).name}」正在结合上下文理解…`,
-      );
       const decision = await directAgentTurn(s, {
         activeAgentId,
-        project: id
-          ? {
-              key: id.key,
-              name: id.name,
-              ...(id.path ? { path: id.path } : {}),
-            }
-          : null,
+        project: id ? { key: id.key, name: id.name } : null,
         experience,
         context: buildAgentContext(),
         history,
@@ -1069,10 +994,9 @@ export function mountPanel(root: HTMLElement): void {
       ].slice(-20);
       chatByProject.set(activeProjectKey, history);
 
-      const taskLabel = decision.taskId ? ` · 任务 ${decision.taskId}` : "";
-      addMessage("assistant", decision.reply + (taskLabel ? `\n（${taskLabel.trim()}）` : ""));
+      addMessage("assistant", decision.reply);
 
-      // Persist lessons proposed by the model
+      // Persist lessons proposed by the model (silent)
       if (decision.lessons?.length) {
         const root = loadMemory();
         for (const lesson of decision.lessons) {
@@ -1085,7 +1009,6 @@ export function mountPanel(root: HTMLElement): void {
               : {}),
           });
         }
-        addMessage("system", `已沉淀 ${decision.lessons.length} 条经验。`);
       }
 
       let actions = filterActionsForAgent(decision.actions);
@@ -1093,10 +1016,6 @@ export function mountPanel(root: HTMLElement): void {
         actions = sanitizeActionsForReplace(actions, text);
       }
       if (actions.length) {
-        addMessage(
-          "system",
-          `执行：${actions.map((a) => a.type).join(" → ")}`,
-        );
         await executeAgentActions(actions);
       } else if (
         getAgent(activeAgentId).ui.showTableTools &&
@@ -1124,7 +1043,7 @@ export function mountPanel(root: HTMLElement): void {
     const name = (styleSelect.value || "").trim();
     if (!name) return;
     if (busy) {
-      addMessage("system", `已记下表样式「${name}」（当前忙碌，完成后可再说替换）。`);
+      addMessage("system", `已记下「${name}」。`);
       return;
     }
     if (draft) {
@@ -1132,20 +1051,17 @@ export function mountPanel(root: HTMLElement): void {
         `我选择了表样式「${name}」。请用它把已识别的表格替换到当前锁定选区，不要重新识别。`,
       );
     } else {
-      addMessage("user", `我选择了表样式「${name}」。`);
+      addMessage("user", `表样式「${name}」。`);
       history = [
         ...history,
-        { role: "user" as const, text: `我选择了表样式「${name}」。` },
+        { role: "user" as const, text: `表样式「${name}」。` },
         {
           role: "assistant" as const,
-          text: `好的，已记录「${name}」。识别完成后会优先用它替换。`,
+          text: `已记下「${name}」。`,
         },
       ].slice(-20);
       chatByProject.set(activeProjectKey, history);
-      addMessage(
-        "assistant",
-        `好的，已记录「${name}」。识别完成后会优先用它替换。`,
-      );
+      addMessage("assistant", `已记下「${name}」。`);
       const mem = loadMemory();
       if (activeProjectKey && activeProjectKey !== "no-doc") {
         rememberNote(mem, {
@@ -1182,7 +1098,7 @@ export function mountPanel(root: HTMLElement): void {
   addMessage(
     "assistant",
     isInDesignRuntime()
-      ? "你好。这里是默认对话：直接说需求即可。\n若要做「伪表/图表 → 真表」，请点下方推荐或打开「Agent」列表加载「伪表恢复」。模型在「配置」。"
-      : "当前不在 InDesign 面板环境。连上宿主后即可使用。",
+      ? "你好。伪表恢复请到「Agent」加载。"
+      : "未连接 InDesign。",
   );
 }
