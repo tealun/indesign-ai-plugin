@@ -30,7 +30,7 @@ export const SKILL_REGISTRY: AgentSkill[] = [
   {
     id: "skill.table_style_priority",
     title: "表样式优先级",
-    agents: ["*", "m0t.table_recover", "m0.table_normalize"],
+    agents: ["default", "m0t.table_recover", "m0.table_normalize"],
     tags: ["table", "style"],
     body: `应用/替换表样式时优先级：用户话里的样式名 > 面板下拉 selectedStyle > 项目 preferredTableStyle。
 名称需与文档 tableStyles 对齐；可用模糊匹配（去括号）。替换真表可 Undo；伪表路径必须先有识别稿再 replace。`,
@@ -38,14 +38,14 @@ export const SKILL_REGISTRY: AgentSkill[] = [
   {
     id: "skill.image_egress_privacy",
     title: "识图外发隐私",
-    agents: ["*", "m0t.table_recover"],
+    agents: ["default", "m0t.table_recover"],
     tags: ["privacy"],
     body: `选区图/补图发往用户配置的 Base URL 前，宿主会要求「确认外发」。向用户说明图像会离开本机；取消则不调用模型。`,
   },
   {
     id: "skill.grep_indesign_dialect",
     title: "InDesign GREP 方言要点",
-    agents: ["*", "m0.grep_assist"],
+    agents: ["default", "m0.grep_assist"],
     tags: ["grep"],
     body: `使用 InDesign「查找/更改」GREP，不是 JS/PCRE 全集。
 常用：\\d 数字、\\s 空白、\\w 字词、(?<=) (?=) 部分版本支持需谨慎；替换里 $1 为子表达式。
@@ -54,14 +54,14 @@ export const SKILL_REGISTRY: AgentSkill[] = [
   {
     id: "skill.compare_no_blind_write",
     title: "比对不盲写",
-    agents: ["*", "m0.copy_compare"],
+    agents: ["default", "m0.copy_compare"],
     tags: ["compare"],
     body: `对照稿可来自「上传对照稿」（compareDocumentText：txt/doc/docx/xls/xlsx/pdf 等）、对话粘贴或剪贴板。比对只产出增删改清单与定位线索；在用户明确要求且具备白名单写回动作之前，不声称已改版面。扫描件 PDF / 旧版 .doc 抽字可能不全时要说明。`,
   },
   {
     id: "skill.proof_list_format",
     title: "校对输出格式",
-    agents: ["*", "m0.proofread"],
+    agents: ["default", "m0.proofread"],
     tags: ["proof"],
     body: `每条问题包含：线索（前后文）+ 原文 + 建议改法 + 类型（错别字/数字/空格/术语）。无选区文本时先请用户选中或锁定选区。`,
   },

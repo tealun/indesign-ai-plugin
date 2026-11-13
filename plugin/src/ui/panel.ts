@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.5";
+const PLUGIN_UI_VERSION = "0.4.6";
 
 function newId(): string {
   try {
@@ -655,8 +655,21 @@ export function mountPanel(root: HTMLElement): void {
     id: string,
     opts?: { announce?: boolean },
   ): void {
+    const prevId = activeAgentId;
     const agent = getAgent(id);
     activeAgentId = agent.id;
+    // Isolate伪表 draft: leaving recover must not leave replace-capable state on normalize.
+    if (
+      prevId === "m0t.table_recover" &&
+      agent.id !== "m0t.table_recover" &&
+      draft
+    ) {
+      draft = null;
+      addMessage(
+        "system",
+        "已离开伪表恢复：清除未落地的识别稿，避免在其它场景误替换。",
+      );
+    }
     if (agent.specialized) {
       recordAgentOpen(agent.id);
       usageMeter.recordSpend?.(agent.id, 0);
@@ -1315,23 +1328,30 @@ export function mountPanel(root: HTMLElement): void {
 
       const taskLabel = decision.taskId ? ` · 任务 ${decision.taskId}` : "";
       const recommendId = (decision.recommendAgentId || "").trim();
-      const recommend = recommendId ? getAgent(recommendId) : null;
-      const handoff =
-        recommend && recommend.specialized
-          ? el("div", { className: "chips" }, [
-              (() => {
-                const b = el(
-                  "div",
-                  { className: "chip", role: "button" },
-                  [`加载「${recommend.name}」`],
-                );
-                b.addEventListener("click", () => {
-                  activateAgent(recommend.id, { announce: true });
-                });
-                return b;
-              })(),
-            ])
-          : undefined;
+      const recommendHit = recommendId
+        ? listSpecializedAgents().find((a) => a.id === recommendId)
+        : undefined;
+      if (recommendId && !recommendHit) {
+        addMessage(
+          "system",
+          `模型建议的 Agent「${recommendId}」不在目录中，已忽略转交。`,
+        );
+      }
+      const handoff = recommendHit
+        ? el("div", { className: "chips" }, [
+            (() => {
+              const b = el(
+                "div",
+                { className: "chip", role: "button" },
+                [`加载「${recommendHit.name}」`],
+              );
+              b.addEventListener("click", () => {
+                activateAgent(recommendHit.id, { announce: true });
+              });
+              return b;
+            })(),
+          ])
+        : undefined;
       addMessage(
         "assistant",
         decision.reply + (taskLabel ? `\n（${taskLabel.trim()}）` : ""),
@@ -1355,8 +1375,11 @@ export function mountPanel(root: HTMLElement): void {
       }
 
       let actions = filterActionsForAgent(decision.actions);
-      if (getAgent(activeAgentId).ui.showTableTools) {
-        actions = sanitizeActionsForReplace(actions, text);
+      // Recover-only: never re-inject replace_table for normalize/other agents (99_07 F17).
+      if (activeAgentId === "m0t.table_recover") {
+        actions = filterActionsForAgent(
+          sanitizeActionsForReplace(actions, text),
+        );
       }
       if (actions.length) {
         addMessage(
@@ -1365,7 +1388,7 @@ export function mountPanel(root: HTMLElement): void {
         );
         await executeAgentActions(actions);
       } else if (
-        getAgent(activeAgentId).ui.showTableTools &&
+        activeAgentId === "m0t.table_recover" &&
         draft &&
         /(替换|成真表)/.test(text) &&
         !(styleSelect.value || "").trim()
@@ -1383,7 +1406,7 @@ export function mountPanel(root: HTMLElement): void {
     }
   }
 
-  // Dropdown selection IS user feedback — only in table-recover agent.
+  // Dropdown: record preferred style for table agents; auto-replace only in伪表恢复.
   styleSelect.addEventListener("change", () => {
     if (!getAgent(activeAgentId).ui.showTableTools) return;
     updateStyleSelectHint();
@@ -1393,38 +1416,39 @@ export function mountPanel(root: HTMLElement): void {
       addMessage("system", `已记下表样式「${name}」（当前忙碌，完成后可再说替换）。`);
       return;
     }
-    if (draft) {
+    if (activeAgentId === "m0t.table_recover" && draft) {
       void handleUserText(
         `我选择了表样式「${name}」。请用它把已识别的表格替换到当前锁定选区，不要重新识别。`,
       );
-    } else {
-      addMessage("user", `我选择了表样式「${name}」。`);
-      history = [
-        ...history,
-        { role: "user" as const, text: `我选择了表样式「${name}」。` },
-        {
-          role: "assistant" as const,
-          text: `好的，已记录「${name}」。识别完成后会优先用它替换。`,
-        },
-      ].slice(-20);
-      chatByProject.set(activeProjectKey, history);
-      addMessage(
-        "assistant",
-        `好的，已记录「${name}」。识别完成后会优先用它替换。`,
-      );
-      const mem = loadMemory();
-      if (activeProjectKey && activeProjectKey !== "no-doc") {
-        rememberNote(mem, {
-          scope: "project",
-          projectKey: activeProjectKey,
-          text: `用户偏好表样式「${name}」`,
-          taskId: "m0t.replace_with_style",
-        });
-        const project = mem.projects[activeProjectKey];
-        if (project) {
-          project.preferredTableStyle = name;
-          saveMemory(mem);
-        }
+      return;
+    }
+    addMessage("user", `我选择了表样式「${name}」。`);
+    const assist =
+      activeAgentId === "m0.table_normalize"
+        ? `好的，已记录「${name}」。可对当前真表说「规范化」以套用该样式。`
+        : `好的，已记录「${name}」。识别完成后会优先用它替换。`;
+    history = [
+      ...history,
+      { role: "user" as const, text: `我选择了表样式「${name}」。` },
+      { role: "assistant" as const, text: assist },
+    ].slice(-20);
+    chatByProject.set(activeProjectKey, history);
+    addMessage("assistant", assist);
+    const mem = loadMemory();
+    if (activeProjectKey && activeProjectKey !== "no-doc") {
+      rememberNote(mem, {
+        scope: "project",
+        projectKey: activeProjectKey,
+        text: `用户偏好表样式「${name}」`,
+        taskId:
+          activeAgentId === "m0.table_normalize"
+            ? "m0.normalize_table_style"
+            : "m0t.replace_with_style",
+      });
+      const project = mem.projects[activeProjectKey];
+      if (project) {
+        project.preferredTableStyle = name;
+        saveMemory(mem);
       }
     }
   });
