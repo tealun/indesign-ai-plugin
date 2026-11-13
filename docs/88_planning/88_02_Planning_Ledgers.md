@@ -20,6 +20,7 @@ Updated: 2026-11-12 after user confirmation of M0-T urgent spike.
 - **文档隔离**：切文档必须重建 chat-log；不持久化文档绝对路径；`user` 级经验同机跨文档、托管账号体系另议。
 - **合入约定（2026-11-13）**：用户确认过的改动默认 squash/merge 进 `main`，不再只停在 feature PR。
 - **M0-T 原位替换（2026-11-13）**：真表父框保持选区左上角与宽度；高度可向下扩展；表宽贴合框宽；单元格文本去软换行。
+- **Agent / 工具提示词分层（2026-11-13）**：决策 Agent 与 `recover_table` OCR 提示分离；示例必须像真实样本（含中英叠字）；保真任务低温 + VERBATIM；evolution 失败案例同步进对应层提示。详见 [`88_03_Agent_Prompt_Optimization.md`](88_03_Agent_Prompt_Optimization.md)。
 
 ## Assumptions
 
