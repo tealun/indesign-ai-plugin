@@ -7,14 +7,16 @@ import {
 } from "../settings/store.js";
 import type {
   AiConnectionMode,
+  LayoutCommand,
   OpenAiWireApi,
   ProviderSettings,
   ProviderType,
   TableDraft,
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
+import { validateCommandBatch } from "../protocol/whitelist.js";
 
-const PLUGIN_UI_VERSION = "0.4.8";
+const PLUGIN_UI_VERSION = "0.4.9";
 
 function newId(): string {
   try {
@@ -60,7 +62,7 @@ import {
   unionBounds,
 } from "../host/indesignHost.js";
 import { isInDesignRuntime } from "../host/uxpRequire.js";
-import { directRecoverTable } from "../transport/direct.js";
+import { directChatCommands, directRecoverTable } from "../transport/direct.js";
 import { directAgentTurn } from "../transport/directAgent.js";
 import { preflightTableReplace } from "../m0t/preflight.js";
 import { validateTableDraft } from "../protocol/tableDraft.js";
@@ -137,6 +139,8 @@ export function mountPanel(root: HTMLElement): void {
   let history: AgentChatMessage[] = [];
   let lastTaskId = "";
   let activeAgentId = DEFAULT_AGENT_ID;
+  /** Previewed M0 LayoutCommand batch (选区排版); cleared on leave / apply. */
+  let pendingLayoutCommands: LayoutCommand[] | null = null;
   // Future: swap NOOP_USAGE_METER for a real points meter.
   const usageMeter = NOOP_USAGE_METER;
 
@@ -669,6 +673,11 @@ export function mountPanel(root: HTMLElement): void {
         ),
       );
     }
+    if (agent.ui.chips.includes("help_layout")) {
+      chips.append(chip("读取选区", () => void doLock()));
+      chips.append(chip("分析排版", () => void analyzeLayout()));
+      chips.append(chip("应用指令", () => void applyPendingLayout()));
+    }
     chips.classList.toggle("hidden", agent.ui.chips.length === 0);
     headerSub.textContent = `${agent.name} · v${PLUGIN_UI_VERSION}`;
     renderSceneBar();
@@ -703,6 +712,14 @@ export function mountPanel(root: HTMLElement): void {
     ) {
       compareDoc = null;
       addMessage("system", "已离开文稿比对：清除上传的对照稿。");
+    }
+    if (
+      prevId === "m0.layout_assist" &&
+      agent.id !== "m0.layout_assist" &&
+      pendingLayoutCommands
+    ) {
+      pendingLayoutCommands = null;
+      addMessage("system", "已离开选区排版：清除未应用的指令预览。");
     }
     if (agent.specialized) {
       recordAgentOpen(agent.id);
@@ -841,21 +858,135 @@ export function mountPanel(root: HTMLElement): void {
   async function doLock(): Promise<void> {
     const snapshot = await readSelectionSnapshot();
     if (snapshot.selection.length === 0) {
-      addMessage("assistant", "当前没有选区。请先在页面上选中矢量伪表组合，再让我读取。");
+      addMessage(
+        "assistant",
+        activeAgentId === "m0.layout_assist"
+          ? "当前没有选区。请先选中正文文本框，再点「读取选区」。"
+          : "当前没有选区。请先在页面上选中矢量伪表组合，再让我读取。",
+      );
       return;
     }
     const ub = unionBounds(snapshot.selection);
     lockSelection(snapshot, ub);
     await refreshStylesSilent();
+    const nextHint =
+      activeAgentId === "m0.layout_assist"
+        ? "下一步可点「分析排版」。"
+        : activeAgentId === "m0.proofread"
+          ? "下一步可以说「校对选区」。"
+          : "下一步可以说「识别表格」。";
     addMessage(
       "assistant",
       (() => {
         const notes = snapshot.selection
           .map((s) => (s.type === "graphic" ? s.notes : undefined))
           .filter(Boolean);
-        return `已锁定选区：${selectionSummary(snapshot.selection)}\n页面 ${snapshot.pageIndex + 1} · ${ub.w.toFixed(1)}×${ub.h.toFixed(1)} pt${notes.length ? `\n${notes.join("\n")}` : ""}\n下一步可以说「识别表格」。`;
+        return `已锁定选区：${selectionSummary(snapshot.selection)}\n页面 ${snapshot.pageIndex + 1} · ${ub.w.toFixed(1)}×${ub.h.toFixed(1)} pt${notes.length ? `\n${notes.join("\n")}` : ""}\n${nextHint}`;
       })(),
     );
+  }
+
+  async function analyzeLayout(): Promise<void> {
+    const locked = getLockedSelection();
+    if (!locked) {
+      addMessage("assistant", "请先「读取选区」锁定要微调的文本框。");
+      return;
+    }
+    const ready = resolveReadySettings();
+    if (!ready.ok) {
+      addMessage("assistant", ready.reason);
+      switchTab("config");
+      return;
+    }
+    const s = ready.settings;
+    const okEgress = await ensureEgressAllowed(s.baseUrl, "document");
+    if (!okEgress) {
+      addMessage("assistant", "已取消：未调用模型分析排版。");
+      return;
+    }
+    setBusy(true);
+    try {
+      addMessage("assistant", "正在分析选区并生成白名单指令预览…");
+      const note =
+        (composer.value || "").trim() ||
+        "请对锁定文本框给出最小必要的排版微调（字号/行距/对齐/样式）。";
+      const commands = await directChatCommands(s, {
+        op: "analyze_and_plan",
+        snapshot: locked.snapshot,
+        userNote: note,
+      });
+      const gate = validateCommandBatch(commands);
+      if (!gate.ok) {
+        pendingLayoutCommands = null;
+        addMessage(
+          "assistant",
+          `模型指令未通过白名单校验（未改文档）：${gate.error.message}`,
+        );
+        return;
+      }
+      if (commands.length === 0) {
+        pendingLayoutCommands = null;
+        addMessage("assistant", "模型未给出可执行指令（commands 为空）。可换描述后再分析。");
+        return;
+      }
+      pendingLayoutCommands = commands;
+      const preview = commands
+        .slice(0, 12)
+        .map((c, i) => `${i + 1}. ${c.type} ${JSON.stringify(c)}`)
+        .join("\n");
+      addMessage(
+        "assistant",
+        `已生成 ${commands.length} 条指令预览（尚未写入文档）。确认无误后点「应用指令」。\n${preview}${commands.length > 12 ? "\n…" : ""}`,
+      );
+    } catch (e) {
+      pendingLayoutCommands = null;
+      addMessage(
+        "assistant",
+        `分析排版失败：${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyPendingLayout(): Promise<void> {
+    if (!pendingLayoutCommands?.length) {
+      addMessage("assistant", "没有待应用的指令。请先「分析排版」。");
+      return;
+    }
+    const gate = validateCommandBatch(pendingLayoutCommands);
+    if (!gate.ok) {
+      pendingLayoutCommands = null;
+      addMessage("assistant", `指令已失效：${gate.error.message}`);
+      return;
+    }
+    setBusy(true);
+    try {
+      addMessage("assistant", `正在应用 ${pendingLayoutCommands.length} 条白名单指令…`);
+      const report = await runCommandBatch({
+        requestId: newId(),
+        commands: pendingLayoutCommands,
+        host: getHost(),
+      });
+      if (!report.ok) {
+        const err =
+          report.results.find((r) => !r.ok)?.error?.message || "未知错误";
+        addMessage(
+          "assistant",
+          `应用未完成：${err}\n可用 Undo 回退已写入部分。`,
+        );
+        return;
+      }
+      pendingLayoutCommands = null;
+      addMessage("assistant", "排版指令已全部应用。可用 Undo 整批回退。");
+    } catch (e) {
+      addMessage(
+        "assistant",
+        `应用失败：${e instanceof Error ? e.message : String(e)}`,
+      );
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function doRecognize(

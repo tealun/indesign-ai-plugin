@@ -8,7 +8,8 @@ export type AgentChipId =
   | "normalize"
   | "help_compare"
   | "help_proof"
-  | "help_grep";
+  | "help_grep"
+  | "help_layout";
 
 export type AgentUiProfile = {
   /** Show table style dropdown + 补图 */
@@ -48,6 +49,7 @@ const OUTPUT_SHAPE = `## 输出（唯一：一个 JSON 对象，无 Markdown 围
 const SPECIALIZED_BLURB = `专属 Agent id（recommendAgentId 必须用这些 id）：
 - m0t.table_recover — 伪表恢复：矢量/图片假表 → 真表
 - m0.table_normalize — 贴表规范化：Excel/Word 贴入真表套样式
+- m0.layout_assist — 选区排版微调：字号/行距/对齐/段字符样式
 - m0.copy_compare — 文稿比对：对照稿 vs 选区
 - m0.proofread — 文章校对
 - m0.grep_assist — GREP 助手
@@ -203,6 +205,24 @@ ${OUTPUT_SHAPE}
 ${taskCatalogForPrompt(["m0.grep_propose", "meta.open_config", "meta.clarify"])}`;
 }
 
+function buildLayoutPrompt(): string {
+  return `你是「选区排版」专属 Agent。
+
+## 职责
+1. 指导用户先「读取选区」，再用面板「分析排版」生成白名单指令预览，确认后「应用指令」。
+2. 可解释字号/行距/对齐/段前后距、创建并套用段落/字符样式；不编造溢出巡检或全书重排。
+3. 本 Agent 的 actions 仅 lock_selection / open_config；真正改文档走面板预览→应用（LayoutCommand 白名单）。
+
+${OUTPUT_SHAPE}
+
+## 允许的 actions
+- {"type":"lock_selection"}
+- {"type":"open_config"}
+
+## 任务目录
+${taskCatalogForPrompt(["m0.layout_tweak", "meta.open_config", "meta.clarify"])}`;
+}
+
 export const DEFAULT_AGENT_ID = "default";
 
 export const AGENT_CATALOG: AgentDefinition[] = [
@@ -215,11 +235,26 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: false,
     ui: {
       showTableTools: false,
-      placeholder: "直接说需求：改假表、贴表样式、比对文稿、校对、GREP…",
+      placeholder: "直接说需求：改假表、微调字号、贴表样式、比对、校对、GREP…",
       chips: [],
     },
     allowedActions: ["open_config"],
     buildSystemPrompt: buildDefaultPrompt,
+  },
+  {
+    id: "m0.layout_assist",
+    name: "选区排版",
+    tagline: "字号/行距/样式微调",
+    description:
+      "对锁定文本框做白名单排版微调：分析→预览指令→确认应用；可创建并套用段/字符样式。",
+    specialized: true,
+    ui: {
+      showTableTools: false,
+      placeholder: "例如：正文略放大、行距 16、建「内文」段样式并套用…",
+      chips: ["help_layout"],
+    },
+    allowedActions: ["lock_selection", "open_config"],
+    buildSystemPrompt: buildLayoutPrompt,
   },
   {
     id: "m0t.table_recover",

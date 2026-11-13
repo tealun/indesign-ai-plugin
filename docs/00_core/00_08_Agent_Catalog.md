@@ -21,6 +21,7 @@
 | --- | --- | --- | --- |
 | `default` | 默认顾问（专家） | 已上线 | 方法/诊断/转交；挂载共用 Skills；`open_config` |
 | `m0t.table_recover` | 伪表恢复 | 已上线 | 矢量/图片假表 → 真表 + 表样式 |
+| `m0.layout_assist` | 选区排版 | 已落地（0.4.9） | 锁定文本框 → 分析排版 → 预览白名单指令 → 应用；段/字符样式创建与套用 |
 | `m0.table_normalize` | 贴表规范化 | 已稳固（0.4.8） | Excel/Word 粘贴或已有真表 → 套文档表样式、清理解释 |
 | `m0.copy_compare` | 文稿比对 | 已稳固（0.4.8） | 上传/粘贴对照稿（txt/doc/docx/xlsx/pdf…；旧 `.xls` 请另存 xlsx）vs 版面：差异报告 |
 | `m0.proofread` | 文章校对 | 已稳固（0.4.8） | 错别字、数字/空格/术语等问题报告；「读取选区」+校对清单 |
@@ -41,10 +42,11 @@
 - 选区文本：`plugin/src/host/extractText.ts`（框/表/单元格 → `storyText`）
 - 剪贴板：`plugin/src/host/clipboard.ts`（比对读入；GREP 一键复制）
 
-## Host deepening（0.4.4–0.4.8）
+## Host deepening（0.4.4–0.4.9）
 
 | Agent | 宿主能力 |
 | --- | --- |
+| 选区排版 | `m0Layout`：setFontSize/Leading/Alignment/Space、create/apply Para|Char Style、moveResizeFrame；选区 snapshot 含样式字段；分析→预览→应用 |
 | 贴表规范化 | `apply_table_style`：选区 Table / Cell 上溯 / 框内 nested tables |
 | 文稿比对 | 上传对照稿（0.4.5+）→ `compareDocumentText`（仅本 Agent 注入）；剪贴板备选；外发确认 |
 | 文章校对 | live `selectionText`（限校对等场景） |
@@ -57,4 +59,5 @@
 3. 各 Agent 仅能发射自身 `allowedActions`。  
 4. GREP 助手能产出可复制的查找表达式（`propose_grep` + 一键复制）。  
 5. 贴表规范化在选中真表（含单元格）时可 `apply_table_style`。  
-6. 比对 / 校对以对话报告为主；不假装已实现全自动覆写全书。
+6. 选区排版：分析指令经白名单校验后才可应用；离开场景清除预览。  
+7. 比对 / 校对以对话报告为主；不假装已实现全自动覆写全书。

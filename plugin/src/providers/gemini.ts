@@ -2,6 +2,11 @@ import type { ChatRequest, ProviderSettings } from "../types/protocol.js";
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
 import { withTimeout } from "../util/timeout.js";
+import {
+  isLayoutAnalyzeOp,
+  layoutAnalyzeSystemPrompt,
+  layoutAnalyzeUserPrompt,
+} from "./layoutAnalyzePrompt.js";
 
 async function chatGemini(
   request: ChatRequest,
@@ -19,7 +24,9 @@ async function chatGemini(
     snapshot: request.snapshot,
     userNote: request.userNote,
   });
-  if (request.op === "agent_turn" && request.userNote) {
+  if (isLayoutAnalyzeOp(request.op)) {
+    textPayload = `${layoutAnalyzeSystemPrompt()}\n\n${layoutAnalyzeUserPrompt(request)}`;
+  } else if (request.op === "agent_turn" && request.userNote) {
     try {
       const p = JSON.parse(request.userNote) as { system?: string; user?: string };
       if (p.system && p.user) textPayload = `${p.system}\n\n${p.user}`;

@@ -99,6 +99,18 @@ export const TASK_CATALOG: TaskDefinition[] = [
     emits: ["lock_selection"],
   },
   {
+    id: "m0.layout_tweak",
+    title: "选区排版微调",
+    triggers: "调整字号、行距、对齐、段前后距，或创建/套用段落与字符样式。",
+    steps: [
+      "lock_selection（读取选区）",
+      "面板「分析排版」→ 预览 LayoutCommand",
+      "用户确认后「应用指令」（白名单 executor）",
+    ],
+    params: [],
+    emits: ["lock_selection"],
+  },
+  {
     id: "m0.grep_propose",
     title: "生成 GREP",
     triggers: "口语描述查找/替换规则，或要 GREP Style 表达式。",

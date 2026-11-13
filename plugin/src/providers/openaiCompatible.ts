@@ -2,6 +2,11 @@ import type { ChatRequest, OpenAiWireApi, ProviderSettings } from "../types/prot
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
 import { withTimeout } from "../util/timeout.js";
+import {
+  isLayoutAnalyzeOp,
+  layoutAnalyzeSystemPrompt,
+  layoutAnalyzeUserPrompt,
+} from "./layoutAnalyzePrompt.js";
 
 function parseAgentNote(
   userNote?: string,
@@ -37,6 +42,9 @@ function recoverPrompt(request: ChatRequest): string {
       .filter(Boolean)
       .join("\n");
   }
+  if (isLayoutAnalyzeOp(request.op)) {
+    return layoutAnalyzeUserPrompt(request);
+  }
   return JSON.stringify({
     op: request.op,
     snapshot: request.snapshot,
@@ -50,6 +58,9 @@ function systemPromptFor(request: ChatRequest): string {
       parseAgentNote(request.userNote)?.system ??
       "You are an InDesign layout agent. Output JSON only."
     );
+  }
+  if (isLayoutAnalyzeOp(request.op)) {
+    return layoutAnalyzeSystemPrompt();
   }
   return "You extract InDesign table structure. Output JSON only. Never output scripts.";
 }

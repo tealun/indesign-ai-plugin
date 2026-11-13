@@ -7,6 +7,10 @@ import { readPngSize } from "../capture/pngSize.js";
 import { withTimeout } from "../util/timeout.js";
 import { isImageLikeItem, resolveToCropFrame, uniqueResolvedTargets } from "./resolveCropFrame.js";
 import { extractIndesignItemText } from "./extractText.js";
+import {
+  executeM0LayoutCommand,
+  harvestTextFrameStyles,
+} from "./m0Layout.js";
 
 function getApp(): any {
   const mod = tryRequireIndesign();
@@ -62,7 +66,14 @@ function toSelectionItem(raw: any): SelectionItem {
   const type = classifyItem(item);
   const storyText = extractIndesignItemText(item, 5000);
   if (type === "textFrame") {
-    return { id, type, bounds, ...(storyText ? { storyText } : {}) };
+    const styles = harvestTextFrameStyles(item);
+    return {
+      id,
+      type,
+      bounds,
+      ...(storyText ? { storyText } : {}),
+      ...styles,
+    };
   }
   if (type === "group") {
     let childCount = 0;
@@ -425,15 +436,18 @@ export function createIndesignHost(): DocumentHost {
   return {
     async styleExists(kind, name) {
       const doc = getDoc();
-      if (kind === "table") {
-        try {
-          const s = doc.tableStyles.itemByName(name);
-          return Boolean(s && s.isValid !== false && String(s.name) === name);
-        } catch {
-          return false;
-        }
+      try {
+        const collection =
+          kind === "table"
+            ? doc.tableStyles
+            : kind === "para"
+              ? doc.paragraphStyles
+              : doc.characterStyles;
+        const s = collection.itemByName(name);
+        return Boolean(s && s.isValid !== false && String(s.name) === name);
+      } catch {
+        return false;
       }
-      return true;
     },
     async objectExists(id) {
       const doc = getDoc();
@@ -588,10 +602,7 @@ export function createIndesignHost(): DocumentHost {
           case "createCharStyle":
           case "applyCharStyle":
           case "moveResizeFrame":
-            return {
-              ok: false,
-              errorMessage: `${command.type} 尚未在可用版启用（当前优先 M0-T 表替换）`,
-            };
+            return executeM0LayoutCommand(doc, command);
           default:
             return { ok: false, errorMessage: "unknown command" };
         }

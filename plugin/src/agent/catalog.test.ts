@@ -31,11 +31,18 @@ describe("agent catalog invariants", () => {
 
   it("specialized agents are listed and have non-empty allowlists", () => {
     const specs = listSpecializedAgents();
-    assert.ok(specs.length >= 5);
+    assert.ok(specs.length >= 6);
+    assert.ok(specs.some((a) => a.id === "m0.layout_assist"));
     for (const a of specs) {
       assert.ok(a.specialized);
       assert.ok(a.allowedActions.length > 0);
     }
+  });
+
+  it("layout_assist does not get table replace actions", () => {
+    const a = getAgent("m0.layout_assist");
+    assert.deepEqual(a.allowedActions, ["lock_selection", "open_config"]);
+    assert.ok(a.ui.chips.includes("help_layout"));
   });
 
   it("task emits are subset of some agent's allowedActions or empty", () => {

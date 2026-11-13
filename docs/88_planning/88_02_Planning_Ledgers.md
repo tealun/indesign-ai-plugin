@@ -1,6 +1,6 @@
 # 88_02 Planning Ledgers
 
-Updated: 2026-11-13 — M0.4 Agent 稳固（0.4.8）：共享 sanitize、传输层白名单、烟测清单；明确不做溢出与缺图。
+Updated: 2026-11-13 — M0 选区排版宿主落地（0.4.9）+ M0.4 稳固（0.4.8）；明确不做溢出与缺图。
 
 ## Decisions
 
@@ -13,9 +13,10 @@ Updated: 2026-11-13 — M0.4 Agent 稳固（0.4.8）：共享 sanitize、传输�
 - 通信：M0 面板直连 API；后期统一后端；布局指令 JSON 协议稳定。
 - 供应商：必须可配 Base URL / API Key / Model；内置 OpenAI 兼容（含中转、DeepSeek）、Claude、Gemini；本期仅 BYOK。
 - M0 命令白名单已锁定（见 `00_04`）；Agent 动作另见 `00_08`。
-- **专属 Agent（本期）**：伪表恢复、贴表规范化、文稿比对、文章校对、GREP 助手 — 权威表 `00_08`；实机勾选 `02_03`。
+- **专属 Agent（本期）**：伪表恢复、选区排版、贴表规范化、文稿比对、文章校对、GREP 助手 — 权威表 `00_08`；实机勾选 `02_03`。
 - **默认顾问**：画册/内页工艺专家（非路由壳）；Skills 共用/`agents` 专属挂载 — `00_09`；`recommendAgentId` 转交。
-- **宿主消毒**：`sanitizeActionsForReplace` 仅 `m0t.table_recover`；`directAgentTurn` 二次白名单过滤；离场清 draft/对照稿 — per EV-02/03、0.4.8。
+- **宿主消毒**：`sanitizeActionsForReplace` 仅 `m0t.table_recover`；`directAgentTurn` 二次白名单过滤；离场清 draft/对照稿/排版预览 — per EV-02/03、0.4.8–0.4.9。
+- **M0 白名单宿主**：原 stub 的字号/行距/对齐/段字符样式/`moveResizeFrame` 已由 `plugin/src/host/m0Layout.ts` 落地（0.4.9）；改文档路径 = 分析预览 → `validateCommandBatch` → `runCommandBatch`。
 - **明确不做**：溢出巡检 Agent、缺图/批量重链 Agent（既有软件已有提醒）。
 - 非目标：全书重排、M0 知识库、全书印前全局校对、每视觉风格独立 Agent 进程。
 - 产品重心：版式评估与优化（评估主能力放 M1，M0 先安全执行闭环）。

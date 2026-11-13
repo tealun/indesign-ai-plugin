@@ -21,6 +21,7 @@ describe("contextGate", () => {
 
   it("limits live selection harvest", () => {
     assert.equal(shouldHarvestLiveSelection("m0.proofread"), true);
+    assert.equal(shouldHarvestLiveSelection("m0.layout_assist"), true);
     assert.equal(shouldHarvestLiveSelection("m0.grep_assist"), false);
     assert.equal(shouldHarvestLiveSelection("default"), false);
   });

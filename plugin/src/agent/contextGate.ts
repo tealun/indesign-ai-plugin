@@ -7,6 +7,7 @@ export const LIVE_SELECTION_AGENT_IDS = new Set([
   "m0.proofread",
   "m0.table_normalize",
   "m0t.table_recover",
+  "m0.layout_assist",
 ]);
 
 export function shouldInjectCompareDocument(agentId: string): boolean {
