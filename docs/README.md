@@ -11,6 +11,7 @@ InDesign AI 插件的权威文档入口。实现与改动前先读对应域的�
 | AI providers / config | [`00_core/00_03_AI_Providers.md`](00_core/00_03_AI_Providers.md) |
 | AI connection modes (BYOK first) | [`00_core/00_07_AI_Connection.md`](00_core/00_07_AI_Connection.md) |
 | Agent catalog / scenes | [`00_core/00_08_Agent_Catalog.md`](00_core/00_08_Agent_Catalog.md) |
+| Agent skills (shared / scoped) | [`00_core/00_09_Agent_Skills.md`](00_core/00_09_Agent_Skills.md) |
 | JSON command protocol | [`00_core/00_04_JSON_Protocol.md`](00_core/00_04_JSON_Protocol.md) |
 | Local setup | [`00_core/00_05_Setup_Guide.md`](00_core/00_05_Setup_Guide.md) |
 | Tech stack | [`00_core/00_06_Tech_Stack.md`](00_core/00_06_Tech_Stack.md) |

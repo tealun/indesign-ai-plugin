@@ -1,8 +1,11 @@
 import { getAgent, DEFAULT_AGENT_ID } from "./catalog.js";
+import { skillsPromptBlock } from "./skills/registry.js";
 import type { AgentTurnPayload } from "./types.js";
 
 export function buildAgentSystemPrompt(agentId: string = DEFAULT_AGENT_ID): string {
-  return getAgent(agentId).buildSystemPrompt();
+  const base = getAgent(agentId).buildSystemPrompt();
+  const skills = skillsPromptBlock(agentId);
+  return skills ? `${base}\n\n${skills}` : base;
 }
 
 export function buildAgentUserPayload(payload: AgentTurnPayload): string {

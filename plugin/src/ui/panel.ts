@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.2";
+const PLUGIN_UI_VERSION = "0.4.3";
 
 function newId(): string {
   try {
@@ -416,7 +416,7 @@ export function mountPanel(root: HTMLElement): void {
   chatView.append(sceneBar, chatLog, recommendBar, chips, composerBar);
 
   const headerSub = el("p", { className: "sub" }, [
-    `对话顾问 · v${PLUGIN_UI_VERSION}`,
+    `工艺顾问 · v${PLUGIN_UI_VERSION}`,
   ]);
 
   root.append(
@@ -577,9 +577,7 @@ export function mountPanel(root: HTMLElement): void {
       );
     }
     chips.classList.toggle("hidden", agent.ui.chips.length === 0);
-    headerSub.textContent = agent.specialized
-      ? `${agent.name} · v${PLUGIN_UI_VERSION}`
-      : `对话顾问 · v${PLUGIN_UI_VERSION}`;
+    headerSub.textContent = `${agent.name} · v${PLUGIN_UI_VERSION}`;
     renderSceneBar();
     renderRecommendBar();
     renderAgentsList();
@@ -1142,7 +1140,29 @@ export function mountPanel(root: HTMLElement): void {
       chatByProject.set(activeProjectKey, history);
 
       const taskLabel = decision.taskId ? ` · 任务 ${decision.taskId}` : "";
-      addMessage("assistant", decision.reply + (taskLabel ? `\n（${taskLabel.trim()}）` : ""));
+      const recommendId = (decision.recommendAgentId || "").trim();
+      const recommend = recommendId ? getAgent(recommendId) : null;
+      const handoff =
+        recommend && recommend.specialized
+          ? el("div", { className: "chips" }, [
+              (() => {
+                const b = el(
+                  "div",
+                  { className: "chip", role: "button" },
+                  [`加载「${recommend.name}」`],
+                );
+                b.addEventListener("click", () => {
+                  activateAgent(recommend.id, { announce: true });
+                });
+                return b;
+              })(),
+            ])
+          : undefined;
+      addMessage(
+        "assistant",
+        decision.reply + (taskLabel ? `\n（${taskLabel.trim()}）` : ""),
+        handoff,
+      );
 
       // Persist lessons proposed by the model
       if (decision.lessons?.length) {
@@ -1253,7 +1273,7 @@ export function mountPanel(root: HTMLElement): void {
   addMessage(
     "assistant",
     isInDesignRuntime()
-      ? "你好。这里是默认对话。\n打开「Agent」可加载：伪表恢复、贴表规范化、文稿比对、文章校对、GREP 助手。\n（不做溢出巡检/缺图重链——其它软件已有提醒。）模型在「配置」。"
+      ? "你好，我是画册/内页工艺顾问：直接说你的排版问题，我会给可执行步骤；需要改文档时会建议并一键转交专属 Agent（伪表恢复、贴表规范化、比对、校对、GREP）。\n不做溢出巡检/缺图重链。模型在「配置」。"
       : "当前不在 InDesign 面板环境。连上宿主后即可使用。",
   );
 }

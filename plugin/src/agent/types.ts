@@ -37,6 +37,8 @@ export type AgentDecision = {
   reply: string;
   /** Identified programmatic task */
   taskId?: string;
+  /** Suggested specialized agent to load next (handoff from advisor) */
+  recommendAgentId?: string;
   /** Whitelisted side effects the host may run, in order */
   actions: AgentAction[];
   /** Experiences to persist after the turn */

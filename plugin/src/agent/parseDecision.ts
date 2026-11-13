@@ -86,11 +86,15 @@ export function parseAgentDecision(text: string): AgentDecision {
     if (a && a.type !== "none") actions.push(a);
   }
   const taskId = String(data.taskId || "").trim() || undefined;
+  const recommendAgentId =
+    String(data.recommendAgentId || data.recommendedAgentId || "").trim() ||
+    undefined;
   const lessons = parseLessons(data.lessons);
   return {
     reply,
     actions,
     ...(taskId ? { taskId } : {}),
+    ...(recommendAgentId ? { recommendAgentId } : {}),
     ...(lessons.length ? { lessons } : {}),
   };
 }

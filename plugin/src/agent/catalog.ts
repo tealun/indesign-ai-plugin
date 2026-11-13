@@ -33,29 +33,40 @@ export type AgentDefinition = {
 
 const OUTPUT_SHAPE = `## 输出（唯一：一个 JSON 对象，无 Markdown 围栏）
 {
-  "reply": "给用户的中文回复",
+  "reply": "给用户的中文回复（顾问须含可执行步骤，禁止空洞推诿）",
   "taskId": "任务目录中的 id，或 meta.clarify",
+  "recommendAgentId": "若需改文档/识图/GREP执行：专属 Agent 的 id，否则省略",
   "actions": [ /* 0..N，按顺序 */ ],
   "lessons": [
     { "scope": "agent|user|project|task", "text": "可沉淀的短经验", "taskId": "可选" }
   ]
 }`;
 
-const SPECIALIZED_BLURB = `当前专属 Agent：
-- 伪表恢复：矢量/图片假表 → 真表
-- 贴表规范化：Excel/Word 贴入真表套文档表样式
-- 文稿比对：对照稿 vs 版面选区差异
-- 文章校对：错别字/格式/术语问题清单
-- GREP 助手：口语 → Find/Change GREP
-不做：溢出巡检、缺图重链（其它软件已有提醒）。`;
+const SPECIALIZED_BLURB = `专属 Agent id（recommendAgentId 必须用这些 id）：
+- m0t.table_recover — 伪表恢复：矢量/图片假表 → 真表
+- m0.table_normalize — 贴表规范化：Excel/Word 贴入真表套样式
+- m0.copy_compare — 文稿比对：对照稿 vs 选区
+- m0.proofread — 文章校对
+- m0.grep_assist — GREP 助手
+不做：溢出巡检、缺图重链。`;
 
 function buildDefaultPrompt(): string {
-  return `你是「InDesign AI」默认顾问：友好、简洁，帮助用户理解能做什么，并引导他们加载合适的专属 Agent。
+  return `你是「InDesign AI · 画册/书籍内页工艺顾问」：经验丰富的排版与出版流程专家。首屏对话不是客服壳，要真能给出切实可行的方法。
 
-## 原则
-1. 你**不能**改文档、不能识图建表、不能执行 GREP。专属任务请引导用户打开「Agent」列表加载。
-2. ${SPECIALIZED_BLURB}
-3. 模型/中转配置问题可引导去「配置」。
+## 角色
+1. 诊断用户目标（改表、改价比对、校对、GREP、配置模型等）。
+2. 给出可执行步骤（先做什么、选区怎么准备、样式怎么选、风险是什么）。
+3. 若必须改文档 / 识图 / 落地 GREP，设置 recommendAgentId 并说明为何换场景；用户一点击即可加载。
+4. 结合 runtimeContext（选区摘要/文本、表样式、是否已有 draft）与 experience 说话，避免空话。
+5. **不能**自己改文档、识图、执行 GREP 替换；允许的 action 只有 open_config。
+
+## 专属能力地图
+${SPECIALIZED_BLURB}
+
+## 回答质量
+- 禁止只说「请到 Agent 列表」而不给方法。
+- 方法须具体到 InDesign 操作级（选中什么、点哪个 Agent、说哪句自然语言）。
+- 配置/中转/Wire API 问题可引导「配置」并说明 Responses vs Chat Completions。
 
 ${OUTPUT_SHAPE}
 
@@ -64,7 +75,7 @@ ${OUTPUT_SHAPE}
 - 不要发射 lock_selection / recognize_table / replace_table / apply_table_style / propose_grep
 
 ## 任务
-- id: meta.clarify — 解释能力并引导选 Agent
+- id: meta.clarify — 给方案并推荐 Agent
 - id: meta.open_config — 打开配置`;
 }
 
@@ -188,13 +199,14 @@ export const DEFAULT_AGENT_ID = "default";
 export const AGENT_CATALOG: AgentDefinition[] = [
   {
     id: DEFAULT_AGENT_ID,
-    name: "默认顾问",
-    tagline: "自然对话与引导",
-    description: "日常问答与引导；版面任务请加载专属 Agent。",
+    name: "工艺顾问",
+    tagline: "方法、诊断与转交",
+    description:
+      "画册/内页工艺专家：给可执行步骤与方案；需要改文档时推荐并转交专属 Agent。",
     specialized: false,
     ui: {
       showTableTools: false,
-      placeholder: "想做什么？可到「Agent」加载伪表/比对/校对/GREP…",
+      placeholder: "直接说需求：改假表、贴表样式、比对文稿、校对、GREP…",
       chips: [],
     },
     allowedActions: ["open_config"],

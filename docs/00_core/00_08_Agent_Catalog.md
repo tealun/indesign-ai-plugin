@@ -2,13 +2,15 @@
 
 ## Goal
 
-面板「Agent」列表可加载的专属场景。默认顾问只引导；改版面/校对/GREP 等能力按 Agent 白名单执行。
+面板「Agent」列表可加载的专属场景。**默认顾问是工艺专家 Agent**（方法、诊断、转交），不是空壳路由；改文档等破坏性能力按专属 Agent 白名单执行。技能挂载见 [`00_09_Agent_Skills.md`](00_09_Agent_Skills.md)。
 
 ## Product decisions（2026-11-13）
 
 | Decision | Detail |
 | --- | --- |
 | UI | 首屏自然对话；点选 Agent 后回到对话首屏并进入该场景 |
+| 默认顾问 | **画册/书籍内页工艺顾问**：给可执行步骤与方案；可 `recommendAgentId` 转交专属场景；几乎不直接改文档 |
+| Skills | 共用 `*` 或按 Agent 挂载；与 Lesson 分离（`00_09`） |
 | Phase-1 AI | 仅自配模型（BYOK）；见 `00_07` |
 | **不做** | **溢出巡检、缺图重链**（宿主/既有软件已有快捷提醒，不重复开发） |
 | 计费 | 预留 hook；本期 NOOP |
@@ -17,7 +19,7 @@
 
 | id | 名称 | 状态 | 职责 |
 | --- | --- | --- | --- |
-| `default` | 默认顾问 | 已上线 | 引导选 Agent；`open_config` |
+| `default` | 默认顾问（专家） | 已上线 | 方法/诊断/转交；挂载共用 Skills；`open_config` |
 | `m0t.table_recover` | 伪表恢复 | 已上线 | 矢量/图片假表 → 真表 + 表样式 |
 | `m0.table_normalize` | 贴表规范化 | 本期落地 | Excel/Word 粘贴或已有真表 → 套文档表样式、清理解释 |
 | `m0.copy_compare` | 文稿比对 | 本期落地 | Word/Excel/粘贴稿 vs 版面选区文本：差异列表（先报告，慎自动覆写） |

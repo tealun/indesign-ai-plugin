@@ -45,6 +45,17 @@ describe("parseAgentDecision", () => {
     assert.equal(d.lessons?.[0]?.scope, "project");
   });
 
+  it("parses recommendAgentId", () => {
+    const d = parseAgentDecision(
+      JSON.stringify({
+        reply: "建议加载伪表恢复",
+        recommendAgentId: "m0t.table_recover",
+        actions: [],
+      }),
+    );
+    assert.equal(d.recommendAgentId, "m0t.table_recover");
+  });
+
   it("parses propose_grep and apply_table_style", () => {
     const d = parseAgentDecision(
       JSON.stringify({
