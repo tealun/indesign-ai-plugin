@@ -1,6 +1,11 @@
 import type { ChatRequest, ProviderSettings } from "../types/protocol.js";
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
+import {
+  recoverTableSystemPrompt,
+  recoverTableTemperature,
+  recoverTableUserPrompt,
+} from "./recoverPrompt.js";
 import { withTimeout } from "../util/timeout.js";
 
 async function chatAnthropic(
@@ -28,7 +33,11 @@ async function chatAnthropic(
     snapshot: request.snapshot,
     userNote: request.userNote,
   });
-  if (request.op === "agent_turn" && request.userNote) {
+  let temperature = settings.temperature;
+  if (request.op === "recover_table") {
+    textPayload = `${recoverTableSystemPrompt()}\n\n${recoverTableUserPrompt(request.userNote)}`;
+    temperature = recoverTableTemperature(settings.temperature);
+  } else if (request.op === "agent_turn" && request.userNote) {
     try {
       const p = JSON.parse(request.userNote) as { system?: string; user?: string };
       if (p.system && p.user) textPayload = `${p.system}\n\n${p.user}`;
@@ -55,7 +64,7 @@ async function chatAnthropic(
         body: JSON.stringify({
           model: settings.model,
           max_tokens: 4096,
-          temperature: settings.temperature,
+          temperature,
           messages: [{ role: "user", content }],
         }),
         signal: controller.signal,

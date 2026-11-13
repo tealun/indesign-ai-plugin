@@ -1,6 +1,11 @@
 import type { ChatRequest, OpenAiWireApi, ProviderSettings } from "../types/protocol.js";
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
+import {
+  recoverTableSystemPrompt,
+  recoverTableTemperature,
+  recoverTableUserPrompt,
+} from "./recoverPrompt.js";
 import { withTimeout } from "../util/timeout.js";
 
 function parseAgentNote(
@@ -23,21 +28,7 @@ function recoverPrompt(request: ChatRequest): string {
     return parseAgentNote(request.userNote)?.user ?? request.userNote ?? "";
   }
   if (request.op === "recover_table") {
-    return [
-      "Recognize the table in the image.",
-      "Return ONLY JSON:",
-      '{"tableDraft":{"headerRowCount":1,"footerRowCount":0,"suggestedTableStyleName":"","rows":[["col1","col2"],["a","b"]]}}',
-      "rules:",
-      "- rows = full matrix including header/footer lines",
-      "- headerRowCount>=1, footerRowCount>=0",
-      "- MUST leave at least one body row: header+footer < rows.length",
-      "- tiny 2-row tables: headerRowCount=1, footerRowCount=0 (never header=2)",
-      "- ignore merged cells",
-      "- keep cell text faithful to the image language",
-      request.userNote ? `userNote: ${request.userNote}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    return recoverTableUserPrompt(request.userNote);
   }
   return JSON.stringify({
     op: request.op,
@@ -53,7 +44,17 @@ function systemPromptFor(request: ChatRequest): string {
       "You are an InDesign layout agent. Output JSON only."
     );
   }
+  if (request.op === "recover_table") {
+    return recoverTableSystemPrompt();
+  }
   return "You extract InDesign table structure. Output JSON only. Never output scripts.";
+}
+
+function temperatureFor(request: ChatRequest, settings: ProviderSettings): number {
+  if (request.op === "recover_table") {
+    return recoverTableTemperature(settings.temperature);
+  }
+  return settings.temperature;
 }
 
 function extractChatCompletionsText(httpBody: string): string {
@@ -130,7 +131,7 @@ function buildChatCompletionsBody(request: ChatRequest, settings: ProviderSettin
   }
   return {
     model: settings.model,
-    temperature: settings.temperature,
+    temperature: temperatureFor(request, settings),
     messages: [
       {
         role: "system",
@@ -156,7 +157,7 @@ function buildResponsesBody(request: ChatRequest, settings: ProviderSettings): u
   }
   return {
     model: settings.model,
-    temperature: settings.temperature,
+    temperature: temperatureFor(request, settings),
     input: [{ role: "user", content }],
   };
 }

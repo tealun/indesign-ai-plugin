@@ -1,6 +1,11 @@
 import type { ChatRequest, ProviderSettings } from "../types/protocol.js";
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
+import {
+  recoverTableSystemPrompt,
+  recoverTableTemperature,
+  recoverTableUserPrompt,
+} from "./recoverPrompt.js";
 import { withTimeout } from "../util/timeout.js";
 
 async function chatGemini(
@@ -19,7 +24,11 @@ async function chatGemini(
     snapshot: request.snapshot,
     userNote: request.userNote,
   });
-  if (request.op === "agent_turn" && request.userNote) {
+  let temperature = settings.temperature;
+  if (request.op === "recover_table") {
+    textPayload = `${recoverTableSystemPrompt()}\n\n${recoverTableUserPrompt(request.userNote)}`;
+    temperature = recoverTableTemperature(settings.temperature);
+  } else if (request.op === "agent_turn" && request.userNote) {
     try {
       const p = JSON.parse(request.userNote) as { system?: string; user?: string };
       if (p.system && p.user) textPayload = `${p.system}\n\n${p.user}`;
@@ -49,7 +58,7 @@ async function chatGemini(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ role: "user", parts }],
-          generationConfig: { temperature: settings.temperature },
+          generationConfig: { temperature },
         }),
         signal: controller.signal,
       }),

@@ -1,5 +1,12 @@
 # Evolution Ledger
 
+## 2026-11-13 — 识图表头丢掉中文
+
+- **Symptom**: 选区图表头有「货号 / Code NO.」等中英叠字，识别预览与真表只剩英文。
+- **Root cause**: 丢字发生在模型 `TableDraft`（预览已无中文），不是写单元格/`normalizeCellText`；中英叠字表头 vision 模型常「简化」成英文，且原提示示例全英文、约束过弱。
+- **Fix**: 统一 `recoverPrompt`（双语示例 + VERBATIM/CJK 规则）；识图 temperature 钳到 ≤0.1；Anthropic/Gemini 的 recover 也走同一提示。
+- **Guardrail**: 识图提示必须含中英叠字示例与「禁止只留英文」；验收对照选区图 header 是否含 CJK。
+
 ## 2026-11-13 — Thinking 三点不动 +「识别中」重复 + UI 过方
 
 - **Symptom**: 忙碌态三点不跳动；已有「识别中…」仍叠一层三点；气泡方正，远逊官方 AI 助手。
