@@ -31,8 +31,8 @@ describe("buildTableReplaceCommands order", () => {
     const frame = built.commands[0]!;
     assert.equal(frame.type, "createTextFrame");
     if (frame.type === "createTextFrame") {
-      // 2 columns → at least 2×42pt; tiny 86×16 selection must grow
-      assert.ok(frame.bounds.w >= 84);
+      // In-place: keep selection width; may grow height only
+      assert.equal(frame.bounds.w, 86);
       assert.equal(frame.bounds.x, 10);
       assert.equal(frame.bounds.y, 20);
       assert.ok(frame.bounds.h >= 16);

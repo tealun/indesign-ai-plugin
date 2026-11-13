@@ -1,4 +1,5 @@
 import type { ProtocolError, TableDraft } from "../types/protocol.js";
+import { normalizeCellText } from "./cellText.js";
 
 export type TableDraftValidation =
   | { ok: true; draft: TableDraft; bodyRowCount: number; columnCount: number }
@@ -156,7 +157,7 @@ export function validateTableDraft(input: unknown): TableDraftValidation {
   const draft: TableDraft = {
     headerRowCount,
     footerRowCount,
-    rows: rows.map((row) => row.map((cell) => String(cell ?? ""))),
+    rows: rows.map((row) => row.map((cell) => normalizeCellText(String(cell ?? "")))),
   };
   if (typeof raw.suggestedTableStyleName === "string") {
     draft.suggestedTableStyleName = raw.suggestedTableStyleName;

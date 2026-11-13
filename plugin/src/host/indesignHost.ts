@@ -6,6 +6,7 @@ import { CAPTURE_MAX_EDGE, CAPTURE_TARGET_PPI } from "../capture/limits.js";
 import { readPngSize } from "../capture/pngSize.js";
 import { withTimeout } from "../util/timeout.js";
 import { isImageLikeItem, resolveToCropFrame, uniqueResolvedTargets } from "./resolveCropFrame.js";
+import { normalizeCellText } from "../protocol/cellText.js";
 
 function getApp(): any {
   const mod = tryRequireIndesign();
@@ -451,9 +452,13 @@ export function createIndesignHost(): DocumentHost {
             } catch {
               /* length check optional */
             }
-            // Equal columns inside the locked frame width — do not resize the frame here
-            equalizeColumnWidths(frame, table, command.columnCount);
-            pinFrameBounds(frame, ctx.created.frameBounds);
+            // Table fits inside selection footprint (in-place), not the reverse.
+            fitTableToFrame(
+              frame,
+              table,
+              command.columnCount,
+              ctx.created.frameBounds,
+            );
             ctx.created.tableId = String(table.id);
             return { ok: true, createdId: String(table.id) };
           }
@@ -491,23 +496,17 @@ export function createIndesignHost(): DocumentHost {
               } catch {
                 /* optional on some versions */
               }
-              // After style (esp. second pass), grow frame to table if needed
-              // while keeping top-left — never shrink below planned footprint.
+              // After style (esp. second pass): pin frame to selection, fit table in.
               if (ctx.created.frameId) {
                 const frame = resolveTextFrame(doc, ctx.created.frameId);
                 if (frame) {
-                  const next = syncFrameToTable(
-                    frame,
-                    table,
-                    ctx.created.frameBounds,
-                  );
-                  if (next) ctx.created.frameBounds = next;
-                  equalizeColumnWidths(
+                  const next = fitTableToFrame(
                     frame,
                     table,
                     Number(table.columns?.length ?? 0) || 1,
+                    ctx.created.frameBounds,
                   );
-                  pinFrameBounds(frame, ctx.created.frameBounds);
+                  if (next) ctx.created.frameBounds = next;
                 }
               }
             } catch (e) {
@@ -681,53 +680,88 @@ function pinFrameBounds(frame: any, bounds: import("../types/protocol.js").Bound
 }
 
 /**
- * Grow frame to fit table content; keep top-left of the planned footprint.
- * Fixes "empty until double-click right handle" when selection strip was too narrow.
+ * In-place: pin frame to selection footprint (fixed width), force table width
+ * to match, equalize columns. Grow height downward only if table still taller.
+ * Avoids huge frames and "empty until double-click handle" clipping.
  */
-function syncFrameToTable(
+function fitTableToFrame(
   frame: any,
   table: any,
+  columnCount: number,
   anchor: import("../types/protocol.js").Bounds | undefined,
 ): import("../types/protocol.js").Bounds | undefined {
   if (!anchor) return undefined;
-  let tableW = 0;
-  let tableH = 0;
-  try {
-    tableW = Number(table.width) || 0;
-    tableH = Number(table.height) || 0;
-  } catch {
-    /* measure below */
-  }
-  if (!(tableW > 0 && tableH > 0)) {
-    try {
-      const gb = Array.from(frame.geometricBounds as number[]);
-      tableW = Number(gb[3]) - Number(gb[1]);
-      tableH = Number(gb[2]) - Number(gb[0]);
-    } catch {
-      return { ...anchor };
-    }
-  }
-  const next: import("../types/protocol.js").Bounds = {
+  const footprint: import("../types/protocol.js").Bounds = {
     x: anchor.x,
     y: anchor.y,
-    w: Math.max(anchor.w, tableW),
-    h: Math.max(anchor.h, tableH),
+    w: Math.max(anchor.w, 12),
+    h: Math.max(anchor.h, 12),
     unit: "pt",
   };
-  try {
-    frame.geometricBounds = geometricFromBounds(next);
-  } catch {
-    /* keep previous */
-  }
-  return next;
-}
+  pinFrameBounds(frame, footprint);
 
-/** Split current frame width evenly — does not move the frame. */
-function equalizeColumnWidths(frame: any, table: any, columnCount: number): void {
   const cols = Math.max(1, columnCount);
   try {
-    const gb = Array.from(frame.geometricBounds as number[]);
-    const width = Number(gb[3]) - Number(gb[1]);
+    if (typeof table.width === "number" || "width" in table) {
+      table.width = footprint.w;
+    }
+  } catch {
+    /* some hosts lock width until columns set */
+  }
+
+  equalizeColumnWidths(frame, table, cols, footprint.w);
+
+  try {
+    if (typeof table.width === "number" || "width" in table) {
+      table.width = footprint.w;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // Recompose so overset/clip clears before measuring height
+  try {
+    const story = frame.parentStory;
+    if (story && typeof story.recompose === "function") story.recompose();
+  } catch {
+    try {
+      if (typeof frame.recompose === "function") frame.recompose();
+    } catch {
+      /* optional */
+    }
+  }
+
+  let tableH = 0;
+  try {
+    tableH = Number(table.height) || 0;
+  } catch {
+    tableH = 0;
+  }
+  if (tableH > footprint.h + 0.5) {
+    footprint.h = tableH;
+    pinFrameBounds(frame, footprint);
+  }
+
+  // Final pin width again — style/recompose must not stretch horizontally
+  pinFrameBounds(frame, footprint);
+  equalizeColumnWidths(frame, table, cols, footprint.w);
+  return footprint;
+}
+
+/** Split width evenly across columns (explicit width preferred). */
+function equalizeColumnWidths(
+  frame: any,
+  table: any,
+  columnCount: number,
+  explicitWidth?: number,
+): void {
+  const cols = Math.max(1, columnCount);
+  try {
+    let width = explicitWidth ?? 0;
+    if (!(width > 0)) {
+      const gb = Array.from(frame.geometricBounds as number[]);
+      width = Number(gb[3]) - Number(gb[1]);
+    }
     if (!(width > 0)) return;
     const colW = width / cols;
     for (let c = 0; c < cols; c++) {
@@ -739,7 +773,7 @@ function equalizeColumnWidths(frame: any, table: any, columnCount: number): void
 }
 
 function writeCellContents(cell: any, text: string): void {
-  const value = text ?? "";
+  const value = normalizeCellText(text ?? "");
   try {
     cell.contents = value;
     return;
