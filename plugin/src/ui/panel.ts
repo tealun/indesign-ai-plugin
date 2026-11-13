@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.6";
+const PLUGIN_UI_VERSION = "0.4.7";
 
 function newId(): string {
   try {
@@ -673,12 +673,20 @@ export function mountPanel(root: HTMLElement): void {
     }
 
     addMessage("assistant", "识别中…");
-    draft = await directRecoverTable(s, {
-      op: "recover_table",
-      snapshot: locked.snapshot,
-      imageDataUrl,
-      ...(note ? { userNote: note } : {}),
-    });
+    try {
+      draft = await directRecoverTable(s, {
+        op: "recover_table",
+        snapshot: locked.snapshot,
+        imageDataUrl,
+        ...(note ? { userNote: note } : {}),
+      });
+    } catch (e) {
+      addMessage(
+        "assistant",
+        `识别失败：${String(e).replace(/^Error:\s*/, "")}。可补图后重试。`,
+      );
+      return false;
+    }
     const v = validateTableDraft(draft);
     if (!v.ok) {
       addMessage("assistant", `识别结果不合法：${v.error.message}`);

@@ -1,8 +1,27 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { validateTableDraft } from "./tableDraft.js";
+import {
+  normalizeHeaderFooterCounts,
+  validateTableDraft,
+} from "./tableDraft.js";
 import { validateCommandBatch } from "./whitelist.js";
 import type { LayoutCommand } from "../types/protocol.js";
+
+describe("normalizeHeaderFooterCounts", () => {
+  it("clamps header=2 on a 2-row table to leave one body row", () => {
+    const n = normalizeHeaderFooterCounts(2, 2, 0);
+    assert.equal(n.headerRowCount, 1);
+    assert.equal(n.footerRowCount, 0);
+    assert.equal(n.repaired, true);
+  });
+
+  it("drops footer when header+footer leave no body", () => {
+    const n = normalizeHeaderFooterCounts(2, 1, 1);
+    assert.equal(n.headerRowCount, 1);
+    assert.equal(n.footerRowCount, 0);
+    assert.equal(n.repaired, true);
+  });
+});
 
 describe("validateTableDraft", () => {
   it("accepts header+body+footer matrix", () => {
@@ -23,14 +42,28 @@ describe("validateTableDraft", () => {
     }
   });
 
-  it("rejects bodyRowCount < 1", () => {
+  it("repairs header-only mislabel on 2-row tables", () => {
+    const result = validateTableDraft({
+      headerRowCount: 2,
+      footerRowCount: 0,
+      rows: [
+        ["货号", "范围"],
+        ["125-101", "0-25"],
+      ],
+    });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.draft.headerRowCount, 1);
+      assert.equal(result.draft.footerRowCount, 0);
+      assert.equal(result.bodyRowCount, 1);
+    }
+  });
+
+  it("rejects single-row matrices", () => {
     const result = validateTableDraft({
       headerRowCount: 1,
-      footerRowCount: 1,
-      rows: [
-        ["a", "b"],
-        ["c", "d"],
-      ],
+      footerRowCount: 0,
+      rows: [["a", "b"]],
     });
     assert.equal(result.ok, false);
   });

@@ -1,5 +1,12 @@
 # Evolution Ledger
 
+## 2026-11-13 — bodyRowCount must be >= 1
+
+- **Symptom**: 小表（表头+1 行数据）识别报 `bodyRowCount must be >= 1`。
+- **Root cause**: 模型常把 `headerRowCount` 标成整表行数（如 2 行表标 header=2）。
+- **Fix**: `normalizeHeaderFooterCounts` 在校验前钳制，保证至少 1 行正文；提示词强调 2 行表只能 header=1。
+- **Guardrail**: 不得因 header/footer 误标直接失败；仅当 `rows.length < 2` 才拒绝。
+
 ## 2026-11-13 — 多对象未编组导出失败 + 无进行中反馈
 
 - **Symptom**: 选中大量未编组 graphic 时选区图错误/空白；点发送或确认后聊天无即时反馈，只能干等结果。
