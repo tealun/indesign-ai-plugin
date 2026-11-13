@@ -246,7 +246,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: false,
     ui: {
       showTableTools: false,
-      placeholder: "直接说需求：改假表、微调字号、贴表样式、比对、校对、GREP…",
+      placeholder: "直接说需求…",
       chips: [],
     },
     allowedActions: ["open_config"],
@@ -261,7 +261,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: true,
     ui: {
       showTableTools: false,
-      placeholder: "例如：正文略放大、行距 16、建「内文」段样式并套用…",
+      placeholder: "例如：正文略放大、行距 16…",
       chips: ["help_layout"],
     },
     allowedActions: ["lock_selection", "open_config"],
@@ -276,7 +276,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: true,
     ui: {
       showTableTools: true,
-      placeholder: "转成表格 / 用样式替换…",
+      placeholder: "转成表格，或说明怎么替换…",
       chips: ["recognize", "replace"],
     },
     allowedActions: [
@@ -296,7 +296,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: true,
     ui: {
       showTableTools: true,
-      placeholder: "例如：用「货号信息表」规范化当前表…",
+      placeholder: "例如：用「货号信息表」规范化…",
       chips: ["list_styles", "normalize"],
     },
     allowedActions: [
@@ -317,7 +317,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     ui: {
       showTableTools: false,
       showCompareUpload: true,
-      placeholder: "上传对照稿后说「开始比对」，或直接粘贴对照文本…",
+      placeholder: "上传对照稿后说「开始比对」…",
       chips: ["help_compare"],
     },
     allowedActions: ["lock_selection", "open_config"],
@@ -331,7 +331,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: true,
     ui: {
       showTableTools: false,
-      placeholder: "选中正文后说：帮我校对这段…",
+      placeholder: "选中正文后说：帮我校对…",
       chips: ["help_proof"],
     },
     allowedActions: ["lock_selection", "open_config"],
@@ -346,7 +346,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: true,
     ui: {
       showTableTools: false,
-      placeholder: "例如：找出 ¥ 后价格数字，并写入「正文」段样式…",
+      placeholder: "例如：找出价格数字并写 GREP…",
       chips: ["help_grep"],
     },
     allowedActions: [

@@ -16,7 +16,7 @@ import type {
 import { createStubHost } from "../executor/stubHost.js";
 import { validateCommandBatch } from "../protocol/whitelist.js";
 
-const PLUGIN_UI_VERSION = "0.4.13";
+const PLUGIN_UI_VERSION = "0.4.14";
 
 function newId(): string {
   try {
@@ -157,8 +157,15 @@ export function mountPanel(root: HTMLElement): void {
     id: "composer",
     className: "composer",
     rows: "2",
-    placeholder: getAgent(DEFAULT_AGENT_ID).ui.placeholder,
   }) as HTMLTextAreaElement;
+
+  /** UXP can double-paint long placeholders; reset attr and keep copy short. */
+  function setComposerPlaceholder(text: string): void {
+    const next = (text || "").trim();
+    composer.removeAttribute("placeholder");
+    if (next) composer.setAttribute("placeholder", next);
+  }
+  setComposerPlaceholder(getAgent(DEFAULT_AGENT_ID).ui.placeholder);
   let thinkingEl: HTMLElement | null = null;
   let thinkingTimer: ReturnType<typeof setInterval> | null = null;
   let thinkingPhase = 0;
@@ -520,12 +527,16 @@ export function mountPanel(root: HTMLElement): void {
     "",
   ]);
 
-  const tableToolsRow = el("div", { className: "composer-meta-row", id: "tableToolsRow" }, [
-    el("span", { className: "meta-label" }, ["表样式"]),
-    styleSelect,
-    el("label", { className: "file-label", for: "pasteFile" }, ["补图"]),
-    fileInput,
-  ]);
+  const tableToolsRow = el(
+    "div",
+    { className: "composer-meta-row hidden", id: "tableToolsRow" },
+    [
+      el("span", { className: "meta-label" }, ["表样式"]),
+      styleSelect,
+      el("label", { className: "file-label", for: "pasteFile" }, ["补图"]),
+      fileInput,
+    ],
+  );
 
   const compareToolsRow = el(
     "div",
@@ -533,15 +544,17 @@ export function mountPanel(root: HTMLElement): void {
     [compareFileLabel, compareFileInput, compareClearBtn, compareDocStatus],
   );
 
-  const composerMeta = el("div", { className: "composer-meta" }, [
+  const composerMeta = el("div", { className: "composer-meta hidden" }, [
     tableToolsRow,
     compareToolsRow,
   ]);
 
   const composerBar = el("div", { className: "composer-bar" }, [
     composerMeta,
-    composer,
-    el("div", { className: "composer-actions" }, [sendBtn]),
+    el("div", { className: "composer-row" }, [
+      composer,
+      el("div", { className: "composer-actions" }, [sendBtn]),
+    ]),
   ]);
 
   agentsView.append(
@@ -667,13 +680,17 @@ export function mountPanel(root: HTMLElement): void {
 
   function renderAgentChrome(): void {
     const agent = getAgent(activeAgentId);
-    composer.placeholder = agent.ui.placeholder;
+    setComposerPlaceholder(agent.ui.placeholder);
     const showTable = Boolean(agent.ui.showTableTools);
     const showCompare = Boolean(agent.ui.showCompareUpload);
-    composerMeta.classList.toggle("hidden", !showTable && !showCompare);
     tableToolsRow.classList.toggle("hidden", !showTable);
     compareToolsRow.classList.toggle("hidden", !showCompare);
+    composerMeta.classList.toggle("hidden", !showTable && !showCompare);
     if (showCompare) refreshCompareDocStatus();
+    else {
+      compareDocStatus.textContent = "";
+      compareClearBtn.classList.add("hidden");
+    }
     chips.innerHTML = "";
     if (agent.ui.chips.includes("recognize")) {
       chips.append(
