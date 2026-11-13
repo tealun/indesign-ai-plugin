@@ -24,7 +24,10 @@ InDesign AI 插件的权威文档入口。实现与改动前先读对应域的�
 | Planning readiness (M0) | [`99_audits/99_01_planning_readiness.md`](99_audits/99_01_planning_readiness.md) |
 | Planning readiness (M0-T) | [`99_audits/99_02_m0t_planning_readiness.md`](99_audits/99_02_m0t_planning_readiness.md) |
 | Planning audit | [`99_audits/99_03_planning_audit.md`](99_audits/99_03_planning_audit.md) |
-| Deep planning audit (latest) | [`99_audits/99_04_deep_planning_audit.md`](99_audits/99_04_deep_planning_audit.md) |
+| Deep planning audit (M0-T protocol) | [`99_audits/99_04_deep_planning_audit.md`](99_audits/99_04_deep_planning_audit.md) |
+| BYOK connection audit | [`99_audits/99_05_byok_connection_audit.md`](99_audits/99_05_byok_connection_audit.md) |
+| Advisor & skills audit | [`99_audits/99_06_advisor_skills_audit.md`](99_audits/99_06_advisor_skills_audit.md) |
+| Catalog / host deep audit (latest impl) | [`99_audits/99_07_catalog_host_deep_audit.md`](99_audits/99_07_catalog_host_deep_audit.md) |
 | Decisions / assumptions | [`88_planning/88_02_Planning_Ledgers.md`](88_planning/88_02_Planning_Ledgers.md) |
 
 ## Maintenance Rules
