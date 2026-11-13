@@ -10,9 +10,10 @@ Evidence limits: 无 InDesign 实机；无真实客户稿联调；静态通读 +
 
 ## Verdict
 
-- P0: **0** | P1: **4** | P2: **6** → **Open（本报告不自动改码；待执行轮）**
-- Main risks:（1）上传对照稿 / 隐式选区与剪贴板被注入**所有** Agent 回合；（2）`xlsx` 社区包已知 High 且无 npm 修复；（3）上传无字节上限，存在面板卡死/zip 炸弹面。
+- P0: **0** | P1: **7** | P2: **6**（F11 Fixed 于同日索引提交）→ **Open（本报告不自动改码；待执行轮）**
+- Main risks:（1）上传对照稿 / 隐式选区与剪贴板被注入**过宽** Agent 回合；（2）`xlsx` 社区包已知 High 且无 npm 修复；（3）上传无字节上限 + 解析竞态；（4）**编组选区**抽字为空导致比对/校对盲区。
 - 白名单改文档边界整体 **Healthy**（default 仅 `open_config`；`filterActionsForAgent` 宿主兜底）。
+- 补充证据：并行深挖 [Audit compare upload host](bc-f42801b4-1414-5461-adef-6566b795c319)（与主审交叉验证 F1/F2/F4，并新增 F13–F16）。
 
 ## Critical Paths
 
@@ -72,35 +73,41 @@ Evidence limits: 无 InDesign 实机；无真实客户稿联调；静态通读 +
 | F8 | P2 | Confirmed / High | Open | 任务目录比对 triggers 仍只写「粘贴」，未提上传 | Docs | `tasks.ts` `m0.compare_copy.triggers` | 更新 triggers + `00_08` Host 小节标明 0.4.5 上传 |
 | F9 | P2 | Confirmed / Medium | Open | `getAgent(badId)` 静默回落 default，错误 `recommendAgentId` 无反馈 | Parameter / UX | `catalog.getAgent`；handoff 仅看 `specialized` | 未知 id 时 system 提示「无法识别的 Agent id」 |
 | F10 | P2 | Confirmed / Medium | Open | `.doc` / 弱 PDF 尽力抽字可能注入噪声/乱码进模型 | Data accuracy | `extractDocBestEffort`；PDF stream 启发式 | 乱码比例检测则拒收并要求 docx/可搜索 PDF；提高 warnings 优先级到用户可见确认 |
-| F11 | P2 | Confirmed / High | Open | `docs/README` 未索引 99_05/99_06（仍称 99_04 latest） | Docs | `docs/README.md` Sources 表 | 增补 99_05–99_07 链接 |
+| F11 | P2 | Confirmed / High | Fixed | `docs/README` 未索引 99_05/99_06（曾称 99_04 latest） | Docs | 同日已增补 99_05–99_07 链接 | 已落地 |
 | F12 | P2 | Confirmed / Medium | Open | 缺 `filterActionsForAgent` / context 作用域单测；面板路径仅手工 | Testing | 无对应 `*.test.ts` | 抽纯函数测白名单过滤与 compare 注入门闸 |
+| F13 | P1 | Confirmed / High | Open | 编组选区 `storyText` 为空：`extractIndesignItemText` 不遍历子文本框 | Data accuracy / Host | `indesignHost.toSelectionItem` group 分支；`extractText.ts` 无 `allPageItems` 游走 | 有界遍历子 TextFrame/Table，拼入 `maxLen`；加 mock 单测 |
+| F14 | P1 | Confirmed / High | Open | 对照稿上传无 generation/`busy`：清除与二次选择可竞态覆盖 | Runtime / UX | `compareFileInput` fire-and-forget；`clear` 可与未完成 parse 交错 | `compareUploadGen`；解析中禁用上传/清除/发送并提示 |
+| F15 | P1 | Confirmed / Medium | Open | `.doc` 尽力抽取用 `String.fromCharCode(...hugeRun)` 可能栈溢出/崩溃 | Runtime / Security | `extractDocBestEffort` `flush` | 分块 `fromCharCode` 或 `TextDecoder('utf-16le')` |
+| F16 | P2 | Confirmed / Medium | Open | 无扩展名 ZIP 只试 docx 即抛错；二进制按 txt「成功」载入乱码 | Data accuracy | `extractDocumentText` ext 空 ZIP 分支 vs 后续 zip 回退不一致 | ZIP：docx→xlsx 回退；低可打印比拒收 |
 
 ## Rejected / Downgraded
 
 - 「default 可能 emit replace_table」→ 宿主 `filterActionsForAgent` 丢弃；降为已缓释，保持监视
-- 「上传文件名 XSS」→ `textContent` / TextNode；Rejected
+- 「上传文件名 XSS」→ `textContent` / TextNode；Rejected（残留：文件名进模型属提示注入，非 DOM XSS）
 - 「bundle 875KB = P0」→ 可接受体积；关注 xlsx 漏洞而非单纯体积
 - 「Lesson 提示注入」→ 既有模型→记忆通道；非本 diff 独有；记入验证缺口
+- 并行审将「无字节上限 / 全 Agent 注入对照稿」标为 P0 → 与主审对齐为 **P1**（本地面板 DoS / 成本隐私，非远程 RCE）；若产品要求零卡死可再升 P0
 
 ## Verification Gaps
 
-- InDesign 实机：Cell 贴表、docx/xlsx/pdf 比对、GREP 复制到查找/更改
-- 大文件（>10MB xlsx）与畸形 zip 下 UXP 稳定性
+- InDesign 实机：Cell 贴表、**编组选区**比对、docx/xlsx/pdf 比对、GREP 复制到查找/更改
+- 大文件（>10MB xlsx）与畸形 zip 下 UXP 稳定性；上传中点清除竞态
 - 客户机密稿上传后的中转日志/保留策略（BYOK 运营）
 - `recommendAgentId` 错误 id 的产品文案
+- `buildAgentUserPayload` 体积预算夹具
 
 ## Coverage
 
 1. Architecture: Pass — Agent / Skill / Action 分层清楚；上下文作用域 **Gap（F1/F4/F7）**  
-2. Platform: Pass（spec）；UXP 剪贴板/上传实机 NV  
-3. Security: **At risk** — F2/F3；隐私 F1/F4/F5  
+2. Platform: Pass（spec）；UXP 剪贴板/上传实机 NV；编组抽字 Gap F13  
+3. Security: **At risk** — F2/F3/F15；隐私 F1/F4/F5  
 4. Efficiency: At risk — 大 context / 默读剪贴板  
-5. Runtime: At risk — 无上传字节门闩  
+5. Runtime: At risk — F2/F14/F15  
 6. Isolation: Pass — 项目 memory key；比对稿未按文档隔离（会话级）  
-7. Data accuracy: At risk — F10  
+7. Data accuracy: At risk — F10/F13/F16  
 8. Parameter: Pass；recommend 回落 F9  
-9. UX: Pass 上传入口；隐私确认 Gap F5  
-10. Docs: Gap — F8/F11  
+9. UX: Pass 上传入口；隐私确认 Gap F5；上传竞态 F14  
+10. Docs: Pass（F11 Fixed）；余 F8  
 11. Testing: Gap — F12；提取单测有  
 12. Deploy: Pass build；依赖 audit 未清
 
@@ -113,13 +120,15 @@ Evidence limits: 无 InDesign 实机；无真实客户稿联调；静态通读 +
 - Accepted F2: `extractDocumentText` + panel `arrayBuffer` 无 size guard  
 - Accepted F3: audit JSON + package.json  
 - Accepted F5: 对比 `ensureImageEgressAllowed` 仅识图路径  
-- Accepted F6/F8/F11: 注释与 docs 对照  
+- Accepted F6/F8: 注释与 docs 对照；F11 Fixed in README  
+- Accepted F13–F16: 并行宿主审 + 主审复读 `extractText` / compare panel / `.doc` flush  
 
 ## Recommendation（执行顺序）
 
 1. **F1+F4+F7**：收紧 `buildAgentContext` 注入门闸（比对稿 / 剪贴板 / live 选区按 Agent）  
-2. **F2**：上传字节 + 解压护栏  
+2. **F2+F14**：上传字节护栏 + 解析 generation/busy  
 3. **F3**：去掉或替换脆弱 `xlsx` 路径（优先 OOXML 自研 + xls 引导）  
-4. F5 大稿外发确认；F6/F8/F11 文档与注释；F9/F12 小改进  
+4. **F13+F15+F16**：编组抽字、`.doc` 分块解码、ZIP/乱码门闸  
+5. F5 大稿外发确认；F6/F8/F12/F9 文档与测试小改进  
 
 User request「再做一次深入审计」→ **本报告为止**；修复需另开「按审计修复」执行轮。
