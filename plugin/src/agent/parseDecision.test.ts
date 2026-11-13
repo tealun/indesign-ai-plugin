@@ -73,5 +73,27 @@ describe("parseAgentDecision", () => {
     }
     assert.equal(d.actions[1]?.type, "apply_table_style");
   });
+
+  it("parses apply_grep_style", () => {
+    const d = parseAgentDecision(
+      JSON.stringify({
+        reply: "写入样式",
+        actions: [
+          {
+            type: "apply_grep_style",
+            paragraphStyleName: "Body",
+            characterStyleName: "Price",
+            find: "\\d+",
+          },
+        ],
+      }),
+    );
+    assert.equal(d.actions[0]?.type, "apply_grep_style");
+    if (d.actions[0]?.type === "apply_grep_style") {
+      assert.equal(d.actions[0].paragraphStyleName, "Body");
+      assert.equal(d.actions[0].characterStyleName, "Price");
+      assert.equal(d.actions[0].find, "\\d+");
+    }
+  });
 });
 

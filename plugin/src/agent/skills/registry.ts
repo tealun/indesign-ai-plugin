@@ -49,7 +49,8 @@ export const SKILL_REGISTRY: AgentSkill[] = [
     tags: ["grep"],
     body: `使用 InDesign「查找/更改」GREP，不是 JS/PCRE 全集。
 常用：\\d 数字、\\s 空白、\\w 字词、(?<=) (?=) 部分版本支持需谨慎；替换里 $1 为子表达式。
-给出表达式时说明在查找框怎么粘贴；GREP 样式写入段落样式为后续能力，本期以 propose_grep 展示为主。`,
+给出表达式时说明在查找框怎么粘贴。
+写入段落样式 Nested GREP Style 时：必须已有段落样式 + 字符样式；用 apply_grep_style；同表达式则更新字符样式映射，否则新增一条。`,
   },
   {
     id: "skill.compare_no_blind_write",

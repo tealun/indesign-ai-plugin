@@ -52,7 +52,7 @@ const SPECIALIZED_BLURB = `专属 Agent id（recommendAgentId 必须用这些 id
 - m0.layout_assist — 选区排版微调：字号/行距/对齐/段字符样式
 - m0.copy_compare — 文稿比对：对照稿 vs 选区
 - m0.proofread — 文章校对
-- m0.grep_assist — GREP 助手
+- m0.grep_assist — GREP 助手（Find/Change + 写入段落 GREP Style）
 不做：溢出巡检、缺图重链。`;
 
 function buildDefaultPrompt(): string {
@@ -187,22 +187,25 @@ ${taskCatalogForPrompt(["m0.proofread_copy", "meta.open_config", "meta.clarify"]
 }
 
 function buildGrepPrompt(): string {
-  return `你是「InDesign AI · GREP 助手」专属 Agent：把用户的自然语言变成 InDesign「查找/更改」可用的 GREP。
+  return `你是「InDesign AI · GREP 助手」专属 Agent：口语 → Find/Change GREP，并可写入段落样式的 Nested GREP Style。
 
 ## 原则
-1. 优先发射 propose_grep（find 必填；changeTo/flags/note 可选）。
-2. 表达式必须是 InDesign GREP 方言（非 JS/PCRE 全套）；在 reply 里简短说明含义与注意点。
-3. 若用户要「GREP 样式」写入段落样式：给出表达式与操作步骤；本期不直接改样式面板。
-4. 不要发射改文档的其它动作。
+1. 优先发射 propose_grep（find 必填；changeTo/flags/note 可选）供复制到查找/更改。
+2. 表达式必须是 InDesign GREP 方言（非 JS/PCRE 全套）；在 reply 里简短说明。
+3. 用户要「写入 GREP 样式 / 进样式」且已给出段落样式名 + 字符样式名时，发射 apply_grep_style（三者皆必填）。样式名须来自 runtimeContext.paragraphStyles / characterStyles；不要编造。
+4. 不确定样式名时先 list_styles，再请用户确认后写入。
+5. 不要发射伪表/贴表等无关动作。
 
 ${OUTPUT_SHAPE}
 
 ## 允许的 actions
 - {"type":"propose_grep","find":"...","changeTo":"...","flags":"...","note":"..."}
+- {"type":"apply_grep_style","paragraphStyleName":"...","characterStyleName":"...","find":"...","note":"..."}
+- {"type":"list_styles"}
 - {"type":"open_config"}
 
 ## 任务目录
-${taskCatalogForPrompt(["m0.grep_propose", "meta.open_config", "meta.clarify"])}`;
+${taskCatalogForPrompt(["m0.grep_propose", "m0.grep_style_write", "meta.list_styles", "meta.open_config", "meta.clarify"])}`;
 }
 
 function buildLayoutPrompt(): string {
@@ -329,15 +332,21 @@ export const AGENT_CATALOG: AgentDefinition[] = [
   {
     id: "m0.grep_assist",
     name: "GREP 助手",
-    tagline: "口语 → 查找/更改 GREP",
-    description: "生成 InDesign Find/Change GREP；可展示可复制表达式（样式内写入后续再做）。",
+    tagline: "口语 → GREP / 进样式",
+    description:
+      "生成 InDesign Find/Change GREP；可复制表达式；可将查找式写入段落样式的 Nested GREP Style（需已有字符样式）。",
     specialized: true,
     ui: {
       showTableTools: false,
-      placeholder: "例如：找出所有 ¥ 后的价格数字…",
+      placeholder: "例如：找出 ¥ 后价格数字，并写入「正文」段样式…",
       chips: ["help_grep"],
     },
-    allowedActions: ["propose_grep", "open_config"],
+    allowedActions: [
+      "propose_grep",
+      "apply_grep_style",
+      "list_styles",
+      "open_config",
+    ],
     buildSystemPrompt: buildGrepPrompt,
   },
 ];

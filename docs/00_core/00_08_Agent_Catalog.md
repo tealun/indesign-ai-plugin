@@ -25,7 +25,7 @@
 | `m0.table_normalize` | 贴表规范化 | 已稳固（0.4.8） | Excel/Word 粘贴或已有真表 → 套文档表样式、清理解释 |
 | `m0.copy_compare` | 文稿比对 | 已稳固（0.4.8） | 上传/粘贴对照稿（txt/doc/docx/xlsx/pdf…；旧 `.xls` 请另存 xlsx）vs 版面：差异报告 |
 | `m0.proofread` | 文章校对 | 已稳固（0.4.8） | 错别字、数字/空格/术语等问题报告；「读取选区」+校对清单 |
-| `m0.grep_assist` | GREP 助手 | 已稳固（0.4.8） | 口语 → Find/Change GREP；`propose_grep` + 一键复制；GREP Style 写入为 M2 |
+| `m0.grep_assist` | GREP 助手 | 已落地（0.4.10） | 口语 → Find/Change GREP；`propose_grep` + 一键复制；**`apply_grep_style` 写入段落 Nested GREP Style** |
 
 ## Explicitly out of catalog
 
@@ -50,14 +50,14 @@
 | 贴表规范化 | `apply_table_style`：选区 Table / Cell 上溯 / 框内 nested tables |
 | 文稿比对 | 上传对照稿（0.4.5+）→ `compareDocumentText`（仅本 Agent 注入）；剪贴板备选；外发确认 |
 | 文章校对 | live `selectionText`（限校对等场景） |
-| GREP 助手 | `propose_grep` 气泡提供「复制查找式 / 替换式」 |
+| GREP 助手 | `propose_grep` 复制芯片 +「写入段落样式」；`apply_grep_style` → `nestedGrepStyles` |
 
 ## Acceptance（本期）
 
 1. Agent 列表可见上述专属项（不含溢出/缺图）。  
 2. 点选后回对话并显示场景栏；可「退出到默认」。  
 3. 各 Agent 仅能发射自身 `allowedActions`。  
-4. GREP 助手能产出可复制的查找表达式（`propose_grep` + 一键复制）。  
+4. GREP 助手能产出可复制查找式，并能在用户确认段/字符样式后写入 Nested GREP Style。  
 5. 贴表规范化在选中真表（含单元格）时可 `apply_table_style`。  
 6. 选区排版：分析指令经白名单校验后才可应用；离开场景清除预览。  
 7. 比对 / 校对以对话报告为主；不假装已实现全自动覆写全书。

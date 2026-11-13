@@ -11,6 +11,15 @@ import {
   executeM0LayoutCommand,
   harvestTextFrameStyles,
 } from "./m0Layout.js";
+import {
+  applyNestedGrepStyleOnDoc,
+  listCharacterStyleNamesFromDoc,
+  listNestedGrepStylesFromDoc,
+  listParagraphStyleNamesFromDoc,
+  type ApplyNestedGrepStyleInput,
+  type ApplyNestedGrepStyleResult,
+  type NestedGrepStyleInfo,
+} from "./grepStyle.js";
 
 function getApp(): any {
   const mod = tryRequireIndesign();
@@ -180,6 +189,26 @@ export async function listTableStyleNames(): Promise<string[]> {
     }
   }
   return names;
+}
+
+export async function listParagraphStyleNames(): Promise<string[]> {
+  return listParagraphStyleNamesFromDoc(getDoc());
+}
+
+export async function listCharacterStyleNames(): Promise<string[]> {
+  return listCharacterStyleNamesFromDoc(getDoc());
+}
+
+export async function listNestedGrepStyles(
+  paragraphStyleName: string,
+): Promise<NestedGrepStyleInfo[]> {
+  return listNestedGrepStylesFromDoc(getDoc(), paragraphStyleName);
+}
+
+export async function applyNestedGrepStyle(
+  input: ApplyNestedGrepStyleInput,
+): Promise<ApplyNestedGrepStyleResult> {
+  return applyNestedGrepStyleOnDoc(getDoc(), input);
 }
 
 /**

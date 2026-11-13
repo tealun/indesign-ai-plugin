@@ -8,7 +8,8 @@ export type AgentActionType =
   | "list_styles"
   | "open_config"
   | "apply_table_style"
-  | "propose_grep";
+  | "propose_grep"
+  | "apply_grep_style";
 
 export type AgentAction =
   | { type: "none" }
@@ -23,6 +24,16 @@ export type AgentAction =
       find: string;
       changeTo?: string;
       flags?: string;
+      note?: string;
+    }
+  | {
+      type: "apply_grep_style";
+      /** Target paragraph style that receives the nested GREP style */
+      paragraphStyleName: string;
+      /** Character style applied to GREP matches */
+      characterStyleName: string;
+      /** InDesign GREP expression (same as propose_grep.find) */
+      find: string;
       note?: string;
     };
 
@@ -68,6 +79,9 @@ export type AgentRuntimeContext = {
   tableStyles: string[];
   selectedStyle: string;
   hasPatchImage: boolean;
+  /** Paragraph / character style names for GREP Style write */
+  paragraphStyles: string[];
+  characterStyles: string[];
 };
 
 export type AgentProjectRef = {
@@ -103,6 +117,7 @@ export const AGENT_ACTION_TYPES: AgentActionType[] = [
   "open_config",
   "apply_table_style",
   "propose_grep",
+  "apply_grep_style",
 ];
 
 /** Actions an Agent may emit (excludes meta "none"). */

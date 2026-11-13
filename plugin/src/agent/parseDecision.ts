@@ -44,6 +44,24 @@ function parseAction(raw: unknown): AgentAction | null {
       ...(note ? { note } : {}),
     };
   }
+  if (o.type === "apply_grep_style") {
+    const paragraphStyleName = String(
+      o.paragraphStyleName || o.paraStyle || o.styleName || "",
+    ).trim();
+    const characterStyleName = String(
+      o.characterStyleName || o.charStyle || "",
+    ).trim();
+    const find = String(o.find || o.grepExpression || o.pattern || "").trim();
+    if (!paragraphStyleName || !characterStyleName || !find) return null;
+    const note = String(o.note || "").trim();
+    return {
+      type: "apply_grep_style",
+      paragraphStyleName,
+      characterStyleName,
+      find,
+      ...(note ? { note } : {}),
+    };
+  }
   if (o.type === "none") return { type: "none" };
   if (o.type === "lock_selection") return { type: "lock_selection" };
   if (o.type === "recognize_table") return { type: "recognize_table" };

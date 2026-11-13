@@ -113,13 +113,37 @@ export const TASK_CATALOG: TaskDefinition[] = [
   {
     id: "m0.grep_propose",
     title: "生成 GREP",
-    triggers: "口语描述查找/替换规则，或要 GREP Style 表达式。",
+    triggers: "口语描述查找/替换规则，或要可复制的 Find/Change 表达式。",
     steps: ["propose_grep（展示可复制表达式）"],
     params: [
       { name: "find", required: true, description: "InDesign GREP 查找式" },
       { name: "changeTo", required: false, description: "替换式" },
     ],
     emits: ["propose_grep"],
+  },
+  {
+    id: "m0.grep_style_write",
+    title: "GREP 写入段落样式",
+    triggers:
+      "把 GREP 做成段落样式里的 Nested GREP Style；用户已点名段落样式与字符样式。",
+    steps: [
+      "必要时 list_styles 核对段/字符样式名",
+      "apply_grep_style（paragraphStyleName + characterStyleName + find）",
+    ],
+    params: [
+      {
+        name: "paragraphStyleName",
+        required: true,
+        description: "目标段落样式（须已存在）",
+      },
+      {
+        name: "characterStyleName",
+        required: true,
+        description: "匹配文本套用的字符样式（须已存在）",
+      },
+      { name: "find", required: true, description: "InDesign GREP 表达式" },
+    ],
+    emits: ["list_styles", "apply_grep_style"],
   },
   {
     id: "meta.list_styles",

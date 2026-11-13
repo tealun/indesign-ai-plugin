@@ -16,7 +16,7 @@ import type {
 import { createStubHost } from "../executor/stubHost.js";
 import { validateCommandBatch } from "../protocol/whitelist.js";
 
-const PLUGIN_UI_VERSION = "0.4.9";
+const PLUGIN_UI_VERSION = "0.4.10";
 
 function newId(): string {
   try {
@@ -56,8 +56,11 @@ import {
 } from "../compare/extractDocumentText.js";
 import { readClipboardText, writeClipboardText } from "../host/clipboard.js";
 import {
+  applyNestedGrepStyle,
   applyTableStyleToSelection,
   createIndesignHost,
+  listCharacterStyleNames,
+  listParagraphStyleNames,
   listTableStyleNames,
   unionBounds,
 } from "../host/indesignHost.js";
@@ -141,6 +144,10 @@ export function mountPanel(root: HTMLElement): void {
   let activeAgentId = DEFAULT_AGENT_ID;
   /** Previewed M0 LayoutCommand batch (选区排版); cleared on leave / apply. */
   let pendingLayoutCommands: LayoutCommand[] | null = null;
+  /** Last propose_grep find — for「写入 GREP 样式」chip / utterance. */
+  let pendingGrepFind: string | null = null;
+  let paragraphStyles: string[] = [];
+  let characterStyles: string[] = [];
   // Future: swap NOOP_USAGE_METER for a real points meter.
   const usageMeter = NOOP_USAGE_METER;
 
@@ -260,8 +267,20 @@ export function mountPanel(root: HTMLElement): void {
     try {
       if (!isInDesignRuntime()) {
         tableStyles = ["Catalog-Table"];
+        paragraphStyles = ["Body", "[Basic Paragraph]"];
+        characterStyles = ["Price", "Emph"];
       } else {
         tableStyles = await listTableStyleNames();
+        try {
+          paragraphStyles = await listParagraphStyleNames();
+        } catch {
+          paragraphStyles = [];
+        }
+        try {
+          characterStyles = await listCharacterStyleNames();
+        } catch {
+          characterStyles = [];
+        }
       }
     } catch {
       tableStyles = [];
@@ -707,6 +726,14 @@ export function mountPanel(root: HTMLElement): void {
     ) {
       pendingLayoutCommands = null;
       addMessage("system", "已离开选区排版：清除未应用的指令预览。");
+    }
+    if (
+      prevId === "m0.grep_assist" &&
+      agent.id !== "m0.grep_assist" &&
+      pendingGrepFind
+    ) {
+      pendingGrepFind = null;
+      addMessage("system", "已离开 GREP 助手：清除待写入的表达式。");
     }
     if (agent.specialized) {
       recordAgentOpen(agent.id);
@@ -1220,7 +1247,38 @@ export function mountPanel(root: HTMLElement): void {
       tableStyles: [...tableStyles],
       selectedStyle: (styleSelect.value || "").trim(),
       hasPatchImage: Boolean(imageDataUrl),
+      paragraphStyles: [...paragraphStyles],
+      characterStyles: [...characterStyles],
     };
+  }
+
+  async function runApplyGrepStyle(opts: {
+    paragraphStyleName: string;
+    characterStyleName: string;
+    find: string;
+  }): Promise<void> {
+    const para = opts.paragraphStyleName.trim();
+    const ch = opts.characterStyleName.trim();
+    const find = opts.find.trim();
+    if (!para || !ch || !find) {
+      addMessage("assistant", "写入 GREP 样式需要：段落样式名、字符样式名、查找式。");
+      return;
+    }
+    if (!isInDesignRuntime()) {
+      addMessage(
+        "assistant",
+        `（浏览器桩）将把 GREP「${find}」写入段落样式「${para}」→ 字符样式「${ch}」。`,
+      );
+      pendingGrepFind = null;
+      return;
+    }
+    const result = await applyNestedGrepStyle({
+      paragraphStyleName: para,
+      characterStyleName: ch,
+      grepExpression: find,
+    });
+    addMessage("assistant", result.message);
+    if (result.ok) pendingGrepFind = null;
   }
 
   function filterActionsForAgent(actions: AgentAction[]): AgentAction[] {
@@ -1270,12 +1328,28 @@ export function mountPanel(root: HTMLElement): void {
           break;
         case "list_styles":
           await refreshStylesSilent();
-          addMessage(
-            "assistant",
-            tableStyles.length
-              ? `文档表样式：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`
-              : "还没有读到表样式。",
-          );
+          if (activeAgentId === "m0.grep_assist") {
+            const para = paragraphStyles.length
+              ? `段落样式：\n${paragraphStyles
+                  .slice(0, 40)
+                  .map((n) => `· ${n}`)
+                  .join("\n")}${paragraphStyles.length > 40 ? "\n…" : ""}`
+              : "未读到段落样式。";
+            const ch = characterStyles.length
+              ? `字符样式：\n${characterStyles
+                  .slice(0, 40)
+                  .map((n) => `· ${n}`)
+                  .join("\n")}${characterStyles.length > 40 ? "\n…" : ""}`
+              : "未读到字符样式。";
+            addMessage("assistant", `${para}\n\n${ch}`);
+          } else {
+            addMessage(
+              "assistant",
+              tableStyles.length
+                ? `文档表样式：\n${tableStyles.map((n) => `· ${n}`).join("\n")}`
+                : "还没有读到表样式。",
+            );
+          }
           break;
         case "apply_table_style": {
           const style =
@@ -1301,6 +1375,7 @@ export function mountPanel(root: HTMLElement): void {
           break;
         }
         case "propose_grep": {
+          pendingGrepFind = action.find;
           const lines = [
             "【InDesign GREP · 可复制到查找/更改】",
             `查找：${action.find}`,
@@ -1337,7 +1412,30 @@ export function mountPanel(root: HTMLElement): void {
             });
             actionsRow.append(copyRep);
           }
+          const writeChip = el("div", { className: "chip", role: "button" }, [
+            "写入段落样式",
+          ]);
+          writeChip.addEventListener("click", () => {
+            void (async () => {
+              await refreshStylesSilent();
+              const paraHint = paragraphStyles.slice(0, 8).join("、") || "（无）";
+              const charHint = characterStyles.slice(0, 8).join("、") || "（无）";
+              addMessage(
+                "assistant",
+                `要把查找式写入 Nested GREP Style，请回复：\n写入「段落样式名」用「字符样式名」\n例：写入「正文」用「价格」\n当前段样式示例：${paraHint}\n当前字符样式示例：${charHint}`,
+              );
+            })();
+          });
+          actionsRow.append(writeChip);
           addMessage("assistant", lines.join("\n"), actionsRow);
+          break;
+        }
+        case "apply_grep_style": {
+          await runApplyGrepStyle({
+            paragraphStyleName: action.paragraphStyleName,
+            characterStyleName: action.characterStyleName,
+            find: action.find,
+          });
           break;
         }
         case "open_config":
@@ -1386,6 +1484,21 @@ export function mountPanel(root: HTMLElement): void {
       chatLog.innerHTML = "";
       addMessage("assistant", "已清空。");
       return;
+    }
+
+    // GREP Style write utterance after propose_grep chip prompt
+    if (pendingGrepFind && activeAgentId === "m0.grep_assist") {
+      const m =
+        /写入[「"“]?(.+?)[」"”]?\s*用[「"“]?(.+?)[」"”]?\s*$/.exec(text) ||
+        /把.?GREP.?写入[「"“]?(.+?)[」"”].*字符样式[「"“]?(.+?)[」"”]/.exec(text);
+      if (m) {
+        await runApplyGrepStyle({
+          paragraphStyleName: m[1]!.trim(),
+          characterStyleName: m[2]!.trim(),
+          find: pendingGrepFind,
+        });
+        return;
+      }
     }
 
     const ready = resolveReadySettings();

@@ -48,11 +48,11 @@
 
 **用户故事**：不会写 GREP，要用 Find/Change 或准备 GREP Style。
 
-**允许 actions**：`propose_grep` | `open_config`
+**允许 actions**：`propose_grep` | `apply_grep_style` | `list_styles` | `open_config`
 
-**行为**：口语 → InDesign GREP；`propose_grep` 在对话中展示查找式/替换式/说明，并提供复制到系统剪贴板的芯片。样式面板写入 GREP Style = 后续里程碑。
+**行为**：口语 → InDesign GREP；`propose_grep` 展示查找式/替换式并提供复制芯片与「写入段落样式」。用户给出段落样式名 + 字符样式名后，`apply_grep_style` 写入该段落样式的 Nested GREP Style（同表达式则更新映射）。不创建缺失的段/字符样式。
 
-**验收**：用户描述规则后出现可复制的 GREP（含一键复制）；不声称已写入文档样式除非宿主动作存在。
+**验收**：可复制 GREP；写入后段落样式可见对应 GREP 条目；缺样式名时 fail-closed 提示。
 
 ## Non-goals（本规格）
 
