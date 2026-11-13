@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.4";
+const PLUGIN_UI_VERSION = "0.4.5";
 
 function newId(): string {
   try {
@@ -37,6 +37,10 @@ import {
   lockSelection,
   selectionSummary,
 } from "../host/session.js";
+import {
+  COMPARE_UPLOAD_ACCEPT,
+  extractDocumentText,
+} from "../compare/extractDocumentText.js";
 import { readClipboardText, writeClipboardText } from "../host/clipboard.js";
 import {
   applyTableStyleToSelection,
@@ -102,6 +106,12 @@ export function mountPanel(root: HTMLElement): void {
   let imageDataUrl = "";
   let draft: TableDraft | null = null;
   let tableStyles: string[] = [];
+  /** Uploaded compare-source (文稿比对). */
+  let compareDoc: {
+    fileName: string;
+    format: string;
+    text: string;
+  } | null = null;
   let busy = false;
   /** Session approval: image may be POSTed to this normalized baseUrl. */
   let egressAllowedBaseUrl = "";
@@ -394,11 +404,43 @@ export function mountPanel(root: HTMLElement): void {
     className: "file-input",
   }) as HTMLInputElement;
 
-  const composerMeta = el("div", { className: "composer-meta" }, [
+  const compareFileInput = el("input", {
+    id: "compareFile",
+    type: "file",
+    accept: COMPARE_UPLOAD_ACCEPT,
+    className: "file-input",
+  }) as HTMLInputElement;
+
+  const compareFileLabel = el(
+    "label",
+    { className: "file-label", for: "compareFile" },
+    ["上传对照稿"],
+  );
+  const compareClearBtn = el(
+    "div",
+    { className: "file-label hidden", role: "button", id: "clearCompareDoc" },
+    ["清除稿件"],
+  );
+  const compareDocStatus = el("span", { className: "meta-label compare-doc-status" }, [
+    "",
+  ]);
+
+  const tableToolsRow = el("div", { className: "composer-meta-row", id: "tableToolsRow" }, [
     el("span", { className: "meta-label" }, ["表样式"]),
     styleSelect,
     el("label", { className: "file-label", for: "pasteFile" }, ["补图"]),
     fileInput,
+  ]);
+
+  const compareToolsRow = el(
+    "div",
+    { className: "composer-meta-row hidden", id: "compareToolsRow" },
+    [compareFileLabel, compareFileInput, compareClearBtn, compareDocStatus],
+  );
+
+  const composerMeta = el("div", { className: "composer-meta" }, [
+    tableToolsRow,
+    compareToolsRow,
   ]);
 
   const composerBar = el("div", { className: "composer-bar" }, [
@@ -521,10 +563,26 @@ export function mountPanel(root: HTMLElement): void {
     }
   }
 
+  function refreshCompareDocStatus(): void {
+    if (compareDoc) {
+      const n = compareDoc.text.length;
+      compareDocStatus.textContent = `已载入 ${compareDoc.fileName}（${compareDoc.format} · ${n} 字）`;
+      compareClearBtn.classList.remove("hidden");
+    } else {
+      compareDocStatus.textContent = "支持 txt / doc / docx / xls / xlsx / pdf 等";
+      compareClearBtn.classList.add("hidden");
+    }
+  }
+
   function renderAgentChrome(): void {
     const agent = getAgent(activeAgentId);
     composer.placeholder = agent.ui.placeholder;
-    composerMeta.classList.toggle("hidden", !agent.ui.showTableTools);
+    const showTable = Boolean(agent.ui.showTableTools);
+    const showCompare = Boolean(agent.ui.showCompareUpload);
+    composerMeta.classList.toggle("hidden", !showTable && !showCompare);
+    tableToolsRow.classList.toggle("hidden", !showTable);
+    compareToolsRow.classList.toggle("hidden", !showCompare);
+    if (showCompare) refreshCompareDocStatus();
     chips.innerHTML = "";
     if (agent.ui.chips.includes("recognize")) {
       chips.append(
@@ -561,7 +619,16 @@ export function mountPanel(root: HTMLElement): void {
     if (agent.ui.chips.includes("help_compare")) {
       chips.append(
         chip("怎么比对", () =>
-          void handleUserText("请说明如何粘贴对照稿并与当前选区比对。"),
+          void handleUserText(
+            "请说明如何上传或粘贴对照稿（txt/doc/docx/xls/xlsx/pdf），并与当前选区比对。",
+          ),
+        ),
+      );
+      chips.append(
+        chip("开始比对", () =>
+          void handleUserText(
+            "请用已上传的对照稿（若无则用剪贴板/我刚粘贴的文字）与当前版面选区做差异比对。",
+          ),
         ),
       );
     }
@@ -645,6 +712,54 @@ export function mountPanel(root: HTMLElement): void {
       addImageMessage("已载入补图（将用于识别）。", imageDataUrl);
     };
     reader.readAsDataURL(file);
+  });
+
+  compareFileInput.addEventListener("change", () => {
+    const file = compareFileInput.files?.[0];
+    if (!file) return;
+    void (async () => {
+      try {
+        const buf = await file.arrayBuffer();
+        const result = await extractDocumentText(
+          file.name,
+          new Uint8Array(buf),
+        );
+        if (!result.text.trim()) {
+          addMessage(
+            "assistant",
+            `未能从「${file.name}」抽出文字。${result.warnings.join("；") || "请换 txt/docx/xlsx，或另存为可搜索 PDF。"}`,
+          );
+          compareFileInput.value = "";
+          return;
+        }
+        compareDoc = {
+          fileName: result.fileName,
+          format: result.format,
+          text: result.text,
+        };
+        refreshCompareDocStatus();
+        const warn = result.warnings.length
+          ? `\n注意：${result.warnings.join("；")}`
+          : "";
+        addMessage(
+          "system",
+          `已载入对照稿「${result.fileName}」（${result.format} · ${result.text.length} 字）。可点「开始比对」或直接说明要比对的范围。${warn}`,
+        );
+      } catch (e) {
+        addMessage(
+          "assistant",
+          `上传对照稿失败：${e instanceof Error ? e.message : String(e)}`,
+        );
+      } finally {
+        compareFileInput.value = "";
+      }
+    })();
+  });
+
+  compareClearBtn.addEventListener("click", () => {
+    compareDoc = null;
+    refreshCompareDocStatus();
+    addMessage("system", "已清除上传的对照稿。");
   });
 
   async function doLock(): Promise<void> {
@@ -924,6 +1039,9 @@ export function mountPanel(root: HTMLElement): void {
       selectionSummary: summary,
       selectionText,
       clipboardText,
+      compareDocumentText: compareDoc?.text ?? "",
+      compareDocumentName: compareDoc?.fileName ?? "",
+      compareDocumentFormat: compareDoc?.format ?? "",
       hasDraft: Boolean(draft),
       readyToReplace: Boolean(draft),
       draftPreview: preview,

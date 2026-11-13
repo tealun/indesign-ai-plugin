@@ -12,6 +12,8 @@ export type AgentChipId =
 export type AgentUiProfile = {
   /** Show table style dropdown + 补图 */
   showTableTools: boolean;
+  /** Show compare-source file upload (txt/doc/docx/xls/xlsx/pdf…) */
+  showCompareUpload?: boolean;
   /** Natural-language placeholder */
   placeholder: string;
   /** Optional chips; empty = none */
@@ -145,8 +147,13 @@ function buildComparePrompt(): string {
 ## 原则
 1. 本期只报告差异（增/删/改），**不要**声称已自动覆写版面。
 2. 版面侧：runtimeContext.selectionText（选区/表文本；可先 lock_selection）。
-3. 对照稿优先级：userMessage 里粘贴的正文 > runtimeContext.clipboardText（系统剪贴板）> recentHistory。
-4. 若两侧都空，说明如何准备：选中版面文字，复制 Word/Excel 到剪贴板或粘贴进对话。
+3. 对照稿优先级：
+   - runtimeContext.compareDocumentText（用户上传的 txt/doc/docx/xls/xlsx/pdf 等解析结果，文件名见 compareDocumentName）
+   - userMessage 里粘贴的正文
+   - runtimeContext.clipboardText（系统剪贴板）
+   - recentHistory
+4. 若两侧都空，说明如何准备：选中版面文字；点「上传对照稿」或粘贴/复制到对话。
+5. 上传稿若有截断或解析警告，在 reply 里如实提醒。
 
 ${OUTPUT_SHAPE}
 
@@ -257,11 +264,13 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     id: "m0.copy_compare",
     name: "文稿比对",
     tagline: "对照稿 vs 版面差异",
-    description: "粘贴 Word/Excel/对照文本，与选区文案比对，列出增删改（本期只报告）。",
+    description:
+      "上传或粘贴对照稿（txt/doc/docx/xls/xlsx/pdf 等），与选区文案比对，列出增删改（本期只报告）。",
     specialized: true,
     ui: {
       showTableTools: false,
-      placeholder: "粘贴对照稿，并说明要和当前选区比对…",
+      showCompareUpload: true,
+      placeholder: "上传对照稿后说「开始比对」，或直接粘贴对照文本…",
       chips: ["help_compare"],
     },
     allowedActions: ["lock_selection", "open_config"],

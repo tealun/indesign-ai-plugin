@@ -57,6 +57,10 @@ export type AgentRuntimeContext = {
   selectionText: string;
   /** Clipboard plain text (compare agent / optional). */
   clipboardText: string;
+  /** Uploaded compare-source document text (parsed). */
+  compareDocumentText: string;
+  compareDocumentName: string;
+  compareDocumentFormat: string;
   hasDraft: boolean;
   /** True when draft exists — replace must NOT re-run vision. */
   readyToReplace: boolean;

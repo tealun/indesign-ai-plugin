@@ -264,10 +264,25 @@ body {
 
 .composer-meta {
   display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+  gap: 6px;
+}
+
+.composer-meta-row {
+  display: flex;
   flex-direction: row;
   align-items: center;
-  margin-bottom: 8px;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.compare-doc-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meta-label {

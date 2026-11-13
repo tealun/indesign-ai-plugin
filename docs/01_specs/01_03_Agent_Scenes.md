@@ -26,13 +26,13 @@
 
 ## m0.copy_compare
 
-**用户故事**：客户改了 Word/Excel/粘贴文本，要看与当前选区/锁定选区文案差异。
+**用户故事**：客户给了 Word/Excel/PDF/粘贴文本，要看与当前选区/锁定选区文案差异。
 
 **允许 actions**：`lock_selection` | `open_config`
 
-**行为**：对照稿优先来自对话粘贴，其次 `runtimeContext.clipboardText`；版面侧为 `selectionText`（锁定选区或 live 选区，含表 TSV）。模型输出增删改列表。本期**不**自动写回文档（避免毁样式）。
+**行为**：对照稿优先级：`compareDocumentText`（面板「上传对照稿」，支持 txt/doc/docx/xls/xlsx/pdf 等）> 对话粘贴 > `clipboardText`；版面侧为 `selectionText`（锁定或 live，含表 TSV）。模型输出增删改列表。本期**不**自动写回文档（避免毁样式）。扫描件 PDF / 旧版 .doc 可能抽字不全，需在回复中说明。
 
-**验收**：有对照稿 + 选区文本时回复含结构化差异说明；不发射未实现的写文档动作。
+**验收**：上传对照稿后可「开始比对」；有对照稿 + 选区文本时回复含结构化差异说明；不发射未实现的写文档动作。
 
 ## m0.proofread
 

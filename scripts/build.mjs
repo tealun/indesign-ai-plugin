@@ -25,6 +25,8 @@ async function run() {
     outfile: join(dist, "main.js"),
     format: "cjs",
     platform: "neutral",
+    // SheetJS / some CJS packages only expose "main" — required under platform:neutral
+    mainFields: ["module", "main"],
     target: ["es2020"],
     sourcemap: true,
     logLevel: "info",

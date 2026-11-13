@@ -22,7 +22,7 @@
 | `default` | 默认顾问（专家） | 已上线 | 方法/诊断/转交；挂载共用 Skills；`open_config` |
 | `m0t.table_recover` | 伪表恢复 | 已上线 | 矢量/图片假表 → 真表 + 表样式 |
 | `m0.table_normalize` | 贴表规范化 | 本期落地 | Excel/Word 粘贴或已有真表 → 套文档表样式、清理解释 |
-| `m0.copy_compare` | 文稿比对 | 本期落地 | Word/Excel/粘贴稿 vs 版面选区文本：差异列表（先报告，慎自动覆写） |
+| `m0.copy_compare` | 文稿比对 | 本期落地 | 上传/粘贴对照稿（txt/doc/docx/xls/xlsx/pdf…）vs 版面选区：差异列表（先报告） |
 | `m0.proofread` | 文章校对 | 本期落地 | 错别字、数字/空格/术语等问题报告；可建议替换文案 |
 | `m0.grep_assist` | GREP 助手 | 本期落地 | 口语 → Find/Change GREP；可选 `propose_grep` 展示；样式内 GREP Style 写入为后续 |
 
@@ -46,7 +46,7 @@
 | Agent | 宿主能力 |
 | --- | --- |
 | 贴表规范化 | `apply_table_style`：选区 Table / Cell 上溯 / 框内 nested tables |
-| 文稿比对 | 无 lock 时读 live 选区文本；`clipboardText` 作对照稿备选 |
+| 文稿比对 | 上传对照稿解析 → `compareDocumentText`；live 选区；`clipboardText` 备选 |
 | 文章校对 | 同上 live `selectionText` |
 | GREP 助手 | `propose_grep` 气泡提供「复制查找式 / 替换式」 |
 
