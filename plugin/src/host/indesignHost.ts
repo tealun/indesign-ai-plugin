@@ -410,10 +410,17 @@ export function createIndesignHost(): DocumentHost {
               } catch {
                 /* optional on some versions */
               }
-              // After style (esp. second pass), keep frame on the intended footprint
+              // After style (esp. second pass), grow frame to table if needed
+              // while keeping top-left — never shrink below planned footprint.
               if (ctx.created.frameId) {
                 const frame = resolveTextFrame(doc, ctx.created.frameId);
                 if (frame) {
+                  const next = syncFrameToTable(
+                    frame,
+                    table,
+                    ctx.created.frameBounds,
+                  );
+                  if (next) ctx.created.frameBounds = next;
                   equalizeColumnWidths(
                     frame,
                     table,
@@ -592,7 +599,49 @@ function pinFrameBounds(frame: any, bounds: import("../types/protocol.js").Bound
   }
 }
 
-/** Split locked frame width evenly — never change frame x/y/w/h here. */
+/**
+ * Grow frame to fit table content; keep top-left of the planned footprint.
+ * Fixes "empty until double-click right handle" when selection strip was too narrow.
+ */
+function syncFrameToTable(
+  frame: any,
+  table: any,
+  anchor: import("../types/protocol.js").Bounds | undefined,
+): import("../types/protocol.js").Bounds | undefined {
+  if (!anchor) return undefined;
+  let tableW = 0;
+  let tableH = 0;
+  try {
+    tableW = Number(table.width) || 0;
+    tableH = Number(table.height) || 0;
+  } catch {
+    /* measure below */
+  }
+  if (!(tableW > 0 && tableH > 0)) {
+    try {
+      const gb = Array.from(frame.geometricBounds as number[]);
+      tableW = Number(gb[3]) - Number(gb[1]);
+      tableH = Number(gb[2]) - Number(gb[0]);
+    } catch {
+      return { ...anchor };
+    }
+  }
+  const next: import("../types/protocol.js").Bounds = {
+    x: anchor.x,
+    y: anchor.y,
+    w: Math.max(anchor.w, tableW),
+    h: Math.max(anchor.h, tableH),
+    unit: "pt",
+  };
+  try {
+    frame.geometricBounds = geometricFromBounds(next);
+  } catch {
+    /* keep previous */
+  }
+  return next;
+}
+
+/** Split current frame width evenly — does not move the frame. */
 function equalizeColumnWidths(frame: any, table: any, columnCount: number): void {
   const cols = Math.max(1, columnCount);
   try {

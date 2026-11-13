@@ -1,5 +1,12 @@
 # Evolution Ledger
 
+## 2026-11-13 — 真表写完框内空白，双击右侧中点才显现
+
+- **Symptom**: 面板显示完成，文本框看似空；双击右侧中间手柄（Fit frame to content）后内容出现。
+- **Root cause**: `442ef9e` 为「锁定选区宽」去掉了按列加宽与 `fitFrameToTable`；伪表选区常约 86×16pt，多列表被挤在过窄框内，视觉上像空框。
+- **Fix**: `expandBoundsForTable` 恢复按列最小宽（42pt）与行高扩展；样式应用后 `syncFrameToTable` 以左上角为锚、只增不减。
+- **Guardrail**: 定位保左上角；可见性优先于「宽高与选区完全一致」。
+
 ## 2026-11-13 — 安全/隔离审计 + 界面啰嗦
 
 - **Findings**: 切文档时 chat-log 串台；`documentPath` 进 localStorage；对话堆满步骤旁白。
