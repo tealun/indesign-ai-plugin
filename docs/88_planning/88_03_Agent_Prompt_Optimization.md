@@ -1,7 +1,7 @@
 # 88_03 Agent / Tool 提示词优化原则
 
 来源：2026-11-13 中英叠字表头被模型「简化」成英文（选区图仍有中文，识别预览已无）等实战教训。  
-状态：规划决定；实现按切片推进，先改工具层提示，再改决策 Agent。
+状态：已落地 v0.4.12（工具层 + 决策附录 + 宿主表头语种钩子）；持续维护 evolution→提示词。
 
 ## 分层：别把两种模型工作混进同一段提示
 
@@ -82,12 +82,12 @@
 
 工具层（`recover_table`）骨架见 `recoverPrompt.ts`：系统保真声明 + 真实双语示例 + 不变量 rules + 低温。
 
-## 落地切片（不一次改完）
+## 落地切片
 
 1. **已做**：`recoverPrompt` 双语示例 + VERBATIM + temp≤0.1（v0.4.11）。
-2. **下一步（Agent）**：`buildM0tPrompt` 增加「识别质量」决策——预览缺语种时建议重试/补图；仍不复制 OCR 长文。
-3. **下一步（宿主）**：识别完成后轻量检查表头是否含 CJK（可配置/可关），只影响 `reply` 提示，不阻断替换。
-4. **持续**：每次 evolution 条目 → 提示词一行 + 测试断言关键词。
+2. **已做（Agent）**：`promptGuards.ts` 失败附录 + 识别质量段写入 `buildM0tPrompt`；样式示例用「货号信息表」；单测断言关键词（v0.4.12）。
+3. **已做（宿主）**：`assessHeaderLanguage` —— 拉丁表头无 CJK 时聊天提示 + `runtimeContext.draftQualityHint`；不阻断替换（v0.4.12）。
+4. **持续**：每次 evolution 条目 → `promptGuards` / `recoverPrompt` 一行 + 测试断言关键词。
 
 ## 非目标
 

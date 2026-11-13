@@ -1,5 +1,10 @@
 # Evolution Ledger
 
+## 2026-11-13 — 落实 Agent/工具提示词分层（88_03）
+
+- **Change**: `promptGuards` 写入伪表 Agent；宿主 `assessHeaderLanguage` 提示可能丢中文；runtimeContext 带 `draftQualityHint`。
+- **Guardrail**: 决策层不塞 OCR 长文；质量告警只建议补图/重识别，不阻断 replace；附录变更要涨 `PROMPT_GUARDS_VERSION` 并过关键词测试。
+
 ## 2026-11-13 — 识图表头丢掉中文
 
 - **Symptom**: 选区图表头有「货号 / Code NO.」等中英叠字，识别预览与真表只剩英文。

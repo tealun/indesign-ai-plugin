@@ -1,4 +1,5 @@
 import { taskCatalogForPrompt, TASK_CATALOG } from "./tasks.js";
+import { M0T_FAILURE_APPENDIX, M0T_QUALITY_DECISION } from "./promptGuards.js";
 
 export type AgentUiProfile = {
   /** Show table style dropdown + 补图 */
@@ -40,6 +41,7 @@ function buildDefaultPrompt(): string {
 2. 当前已提供的专属 Agent：伪表恢复（把矢量假表或裁切图表图片变成真表）。
 3. 用户若直接说转成表格/识别表格，请明确请他们打开 Agent 列表加载「伪表恢复」。
 4. 模型/中转配置问题可引导去「配置」。
+5. reply 禁止输出 Base URL、host、端口、API Key。
 
 ${OUTPUT_SHAPE}
 
@@ -59,15 +61,16 @@ function buildM0tPrompt(): string {
 1. 专注本职：只做伪表/图表恢复相关程序化任务，不编造未实现能力。
 2. 最大化智能：结合 runtimeContext + 经验理解省略说法；能安全推进就推进。
 3. 项目隔离：project 经验只属于当前文档。
-4. 经验沉淀：稳定偏好写入 lessons。
+4. 经验沉淀：稳定偏好写入 lessons（短文本；无密钥/URL）。
 5. 安全：不输出脚本；改文档只能通过 actions。replace_table 可 Undo。
+6. reply 极简；禁止输出 Base URL、host、端口、API Key、本地路径。
 
 ${OUTPUT_SHAPE}
 
 ## 允许的 actions
 - {"type":"lock_selection"}
 - {"type":"recognize_table"}
-- {"type":"replace_table","styleName":"..."}
+- {"type":"replace_table","styleName":"货号信息表"}
 - {"type":"list_styles"}
 - {"type":"open_config"}
 
@@ -75,10 +78,14 @@ ${OUTPUT_SHAPE}
 ${taskCatalogForPrompt()}
 
 ## 决策要点
-- hasDraft=======true 且用户要替换 → 只发 replace_table，禁止再 recognize/lock。
+- hasDraft=true 且用户要替换 → 只发 replace_table，禁止再 recognize/lock。
 - 仅当用户明确「重新识别」才可再 recognize。
 - 样式优先：用户话 > selectedStyle > projectPreferredTableStyle。
-- 内嵌图会归一到图框，只识别裁切可见区域（宿主已处理）。`;
+- 内嵌图会归一到图框，只识别裁切可见区域（宿主已处理）。
+
+${M0T_QUALITY_DECISION}
+
+${M0T_FAILURE_APPENDIX}`;
 }
 
 export const DEFAULT_AGENT_ID = "default";

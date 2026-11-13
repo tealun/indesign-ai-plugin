@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.11";
+const PLUGIN_UI_VERSION = "0.4.12";
 
 function newId(): string {
   try {
@@ -67,6 +67,7 @@ import {
 import { recordAgentOpen, sortAgentsByUsage } from "../agent/usageStore.js";
 import { el } from "./dom.js";
 import { matchTableStyleName } from "./matchStyle.js";
+import { assessHeaderLanguage } from "../protocol/draftQuality.js";
 
 type Role = "assistant" | "user" | "system";
 
@@ -732,6 +733,11 @@ export function mountPanel(root: HTMLElement): void {
       "assistant",
       `识别完成：${draft.rows.length} 行 × ${draft.rows[0]?.length ?? 0} 列（表头 ${draft.headerRowCount} / 表尾 ${draft.footerRowCount}）。\n${preview}${draft.rows.length > 8 ? "\n…" : ""}`,
     );
+    // Host quality hook (88_03): advisory only — never blocks replace.
+    const lang = assessHeaderLanguage(draft);
+    if (lang.message) {
+      addMessage("assistant", lang.message);
+    }
     promptPickStyleAfterRecognize();
     return true;
   }
@@ -872,12 +878,17 @@ export function mountPanel(root: HTMLElement): void {
           .map((r) => r.join(" | "))
           .join("\n")
       : "";
+    const lang = draft
+      ? assessHeaderLanguage(draft)
+      : { likelyDroppedCjk: false, message: null as string | null };
     return {
       selectionLocked: Boolean(locked),
       selectionSummary: locked ? selectionSummary(locked.snapshot.selection) : "",
       hasDraft: Boolean(draft),
       readyToReplace: Boolean(draft),
       draftPreview: preview,
+      headerLikelyDroppedCjk: lang.likelyDroppedCjk,
+      draftQualityHint: lang.message || "",
       tableStyles: [...tableStyles],
       selectedStyle: (styleSelect.value || "").trim(),
       hasPatchImage: Boolean(imageDataUrl),
@@ -893,7 +904,9 @@ export function mountPanel(root: HTMLElement): void {
     userText: string,
   ): AgentAction[] {
     const wantsReplace = /(替换|成真表|落地|写入真表)/.test(userText);
-    const wantsRedoVision = /(重新识别|再识别|识错|重做识别)/.test(userText);
+    const wantsRedoVision = /(重新识别|再识别|识错|重做识别|重试识别|补图)/.test(
+      userText,
+    );
     if (!draft || !wantsReplace || wantsRedoVision) return actions;
 
     let next = actions.filter(
