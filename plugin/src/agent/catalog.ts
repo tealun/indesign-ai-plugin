@@ -265,7 +265,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: true,
     ui: {
       showTableTools: true,
-      placeholder: "自然说：转成表格 / 用「样式名」替换…",
+      placeholder: "转成表格 / 用样式替换…",
       chips: ["recognize", "replace"],
     },
     allowedActions: [

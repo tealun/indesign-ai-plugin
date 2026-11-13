@@ -18,7 +18,7 @@
 1. 安装后到「配置」→「自配模型」（唯一选项）。
 2. 按自己平时的中转填写 Base URL / API Key / 识图 Model；Codex `wire_api=responses` 时 Wire API 选 Responses。
 3. 对话 / 伪表识别走同一套本地配置；无账号、无点数。
-4. 识图外发前须在对话中「确认外发」（或点取消）；同一会话对同一 Base URL 只确认一次。
+4. 识图外发前须点底部「确认外发」chip（或回复确认/取消）；同一会话对同一 Base URL 只确认一次。
 
 验收：`resolveReadySettings()` 在完整 BYOK 下返回 `ok`；缺项给出中文原因并引导回配置页；`doRecognize` 在首次外发前阻塞于确认。
 

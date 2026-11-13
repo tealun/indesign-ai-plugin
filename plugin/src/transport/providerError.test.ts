@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { formatProviderHttpError } from "./providerError.js";
 
 describe("formatProviderHttpError", () => {
-  it("includes status, url, model and 404 hint", () => {
+  it("includes status, path, model and 404 hint without echoing baseUrl", () => {
     const err = formatProviderHttpError(
       404,
       '{"error":{"message":"model_not_found"}}',
@@ -22,5 +22,7 @@ describe("formatProviderHttpError", () => {
     assert.match(err.message, /gpt-5\.5/);
     assert.match(err.message, /chat\/completions/);
     assert.match(err.message, /model_not_found/);
+    assert.doesNotMatch(err.message, /web3-ai\.club/);
+    assert.doesNotMatch(err.message, /https:\/\//);
   });
 });

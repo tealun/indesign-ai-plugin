@@ -75,17 +75,17 @@ export function getOrCreateProject(
   root: AgentMemoryRoot,
   identity: { key: string; name: string; path?: string },
 ): ProjectMemory {
+  void identity.path; // never persist filesystem paths (isolation / leak surface)
   const existing = root.projects[identity.key];
   if (existing) {
     existing.documentName = identity.name;
-    if (identity.path) existing.documentPath = identity.path;
+    delete existing.documentPath;
     existing.updatedAt = nowIso();
     return existing;
   }
   const created: ProjectMemory = {
     key: identity.key,
     documentName: identity.name,
-    ...(identity.path ? { documentPath: identity.path } : {}),
     lessons: [],
     taskStats: {},
     digests: [],

@@ -25,6 +25,16 @@ describe("agent memory store", () => {
     assert.equal(sliceB.projectLessons.length, 0);
   });
 
+  it("does not persist filesystem paths", () => {
+    const root = emptyMemory();
+    const p = getOrCreateProject(root, {
+      key: "doc:a",
+      name: "A.indd",
+      path: "file:///Users/secret/Catalog.indd",
+    });
+    assert.equal(p.documentPath, undefined);
+  });
+
   it("records preferred style on success", () => {
     const root = emptyMemory();
     getOrCreateProject(root, { key: "doc:a", name: "A.indd" });

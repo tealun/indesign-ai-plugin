@@ -73,7 +73,6 @@ export type AgentRuntimeContext = {
 export type AgentProjectRef = {
   key: string;
   name: string;
-  path?: string;
 };
 
 export type AgentExperienceSlice = {
