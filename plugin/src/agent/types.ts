@@ -105,3 +105,6 @@ export const AGENT_ACTION_TYPES: AgentActionType[] = [
   "apply_table_style",
   "propose_grep",
 ];
+
+/** Actions an Agent may emit (excludes meta "none"). */
+export type AgentHostActionType = Exclude<AgentActionType, "none">;

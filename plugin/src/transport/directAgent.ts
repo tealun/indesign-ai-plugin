@@ -1,3 +1,5 @@
+import { getAgent } from "../agent/catalog.js";
+import { filterActionsByAllowlist } from "../agent/contextGate.js";
 import { parseAgentDecision } from "../agent/parseDecision.js";
 import { buildAgentSystemPrompt, buildAgentUserPayload } from "../agent/systemPrompt.js";
 import type { AgentDecision, AgentTurnPayload } from "../agent/types.js";
@@ -45,7 +47,11 @@ export async function directAgentTurn(
   // Prefer message text extraction via table draft path sniff — adapters return raw HTTP.
   // openaiCompatible parseTableDraft uses sniffExtract internally; here call chat text via recover parse:
   const text = extractAdapterText(raw.text);
-  return parseAgentDecision(text);
+  const decision = parseAgentDecision(text);
+  // Defense in depth (99_07 A9): strip disallowed actions before panel execute.
+  const allowed = getAgent(agentId).allowedActions;
+  const { kept } = filterActionsByAllowlist(decision.actions, allowed);
+  return { ...decision, actions: kept };
 }
 
 function extractAdapterText(httpBody: string): string {

@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.7";
+const PLUGIN_UI_VERSION = "0.4.8";
 
 function newId(): string {
   try {
@@ -43,6 +43,10 @@ import {
   shouldInjectCompareDocument,
   shouldReadClipboard,
 } from "../agent/contextGate.js";
+import {
+  maySanitizeReplaceForAgent,
+  sanitizeActionsForReplace,
+} from "../agent/sanitizeActions.js";
 import {
   COMPARE_UPLOAD_ACCEPT,
   MAX_UPLOAD_BYTES,
@@ -653,6 +657,7 @@ export function mountPanel(root: HTMLElement): void {
       );
     }
     if (agent.ui.chips.includes("help_proof")) {
+      chips.append(chip("读取选区", () => void doLock()));
       chips.append(
         chip("校对选区", () => void handleUserText("请校对当前选区的文字。")),
       );
@@ -689,6 +694,15 @@ export function mountPanel(root: HTMLElement): void {
         "system",
         "已离开伪表恢复：清除未落地的识别稿，避免在其它场景误替换。",
       );
+    }
+    // Isolate对照稿：离开比对场景清除上传稿，避免会话内残留外发面。
+    if (
+      prevId === "m0.copy_compare" &&
+      agent.id !== "m0.copy_compare" &&
+      compareDoc
+    ) {
+      compareDoc = null;
+      addMessage("system", "已离开文稿比对：清除上传的对照稿。");
     }
     if (agent.specialized) {
       recordAgentOpen(agent.id);
@@ -1115,40 +1129,6 @@ export function mountPanel(root: HTMLElement): void {
     };
   }
 
-  /**
-   * Host invariant: if we already have a table draft and the user asked to replace
-   * (not re-recognize), drop redundant lock/recognize so we never re-OCR.
-   */
-  function sanitizeActionsForReplace(
-    actions: AgentAction[],
-    userText: string,
-  ): AgentAction[] {
-    const wantsReplace = /(替换|成真表|落地|写入真表)/.test(userText);
-    const wantsRedoVision = /(重新识别|再识别|识错|重做识别)/.test(userText);
-    if (!draft || !wantsReplace || wantsRedoVision) return actions;
-
-    let next = actions.filter(
-      (a) => a.type !== "recognize_table" && a.type !== "lock_selection",
-    );
-    const hasReplace = next.some((a) => a.type === "replace_table");
-    if (!hasReplace) {
-      const style =
-        (styleSelect.value || "").trim() ||
-        loadMemory().projects[activeProjectKey]?.preferredTableStyle ||
-        "";
-      if (style) {
-        next = [...next, { type: "replace_table", styleName: style }];
-      }
-    }
-    if (next.length !== actions.length) {
-      addMessage(
-        "system",
-        "已有识别结果：跳过重新识图，只执行替换。",
-      );
-    }
-    return next;
-  }
-
   function filterActionsForAgent(actions: AgentAction[]): AgentAction[] {
     const { kept, dropped } = filterActionsByAllowlist(
       actions,
@@ -1445,10 +1425,21 @@ export function mountPanel(root: HTMLElement): void {
 
       let actions = filterActionsForAgent(decision.actions);
       // Recover-only: never re-inject replace_table for normalize/other agents (99_07 F17).
-      if (activeAgentId === "m0t.table_recover") {
-        actions = filterActionsForAgent(
-          sanitizeActionsForReplace(actions, text),
-        );
+      if (maySanitizeReplaceForAgent(activeAgentId)) {
+        const style =
+          (styleSelect.value || "").trim() ||
+          loadMemory().projects[activeProjectKey]?.preferredTableStyle ||
+          "";
+        const shaped = sanitizeActionsForReplace({
+          actions,
+          userText: text,
+          hasDraft: Boolean(draft),
+          styleName: style,
+        });
+        if (shaped.skippedVision) {
+          addMessage("system", "已有识别结果：跳过重新识图，只执行替换。");
+        }
+        actions = filterActionsForAgent(shaped.actions);
       }
       if (actions.length) {
         addMessage(

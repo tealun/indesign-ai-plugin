@@ -21,10 +21,10 @@
 | --- | --- | --- | --- |
 | `default` | 默认顾问（专家） | 已上线 | 方法/诊断/转交；挂载共用 Skills；`open_config` |
 | `m0t.table_recover` | 伪表恢复 | 已上线 | 矢量/图片假表 → 真表 + 表样式 |
-| `m0.table_normalize` | 贴表规范化 | 本期落地 | Excel/Word 粘贴或已有真表 → 套文档表样式、清理解释 |
-| `m0.copy_compare` | 文稿比对 | 本期落地 | 上传/粘贴对照稿（txt/doc/docx/xls/xlsx/pdf…）vs 版面选区：差异列表（先报告） |
-| `m0.proofread` | 文章校对 | 本期落地 | 错别字、数字/空格/术语等问题报告；可建议替换文案 |
-| `m0.grep_assist` | GREP 助手 | 本期落地 | 口语 → Find/Change GREP；可选 `propose_grep` 展示；样式内 GREP Style 写入为后续 |
+| `m0.table_normalize` | 贴表规范化 | 已稳固（0.4.8） | Excel/Word 粘贴或已有真表 → 套文档表样式、清理解释 |
+| `m0.copy_compare` | 文稿比对 | 已稳固（0.4.8） | 上传/粘贴对照稿（txt/doc/docx/xlsx/pdf…；旧 `.xls` 请另存 xlsx）vs 版面：差异报告 |
+| `m0.proofread` | 文章校对 | 已稳固（0.4.8） | 错别字、数字/空格/术语等问题报告；「读取选区」+校对清单 |
+| `m0.grep_assist` | GREP 助手 | 已稳固（0.4.8） | 口语 → Find/Change GREP；`propose_grep` + 一键复制；GREP Style 写入为 M2 |
 
 ## Explicitly out of catalog
 
@@ -41,7 +41,7 @@
 - 选区文本：`plugin/src/host/extractText.ts`（框/表/单元格 → `storyText`）
 - 剪贴板：`plugin/src/host/clipboard.ts`（比对读入；GREP 一键复制）
 
-## Host deepening（0.4.4–0.4.7）
+## Host deepening（0.4.4–0.4.8）
 
 | Agent | 宿主能力 |
 | --- | --- |

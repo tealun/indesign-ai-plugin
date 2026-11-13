@@ -1,4 +1,5 @@
 import { taskCatalogForPrompt } from "./tasks.js";
+import type { AgentHostActionType } from "./types.js";
 
 export type AgentChipId =
   | "recognize"
@@ -29,7 +30,7 @@ export type AgentDefinition = {
   specialized: boolean;
   ui: AgentUiProfile;
   /** Allowed action types for host sanitizer */
-  allowedActions: string[];
+  allowedActions: AgentHostActionType[];
   buildSystemPrompt: () => string;
 };
 
