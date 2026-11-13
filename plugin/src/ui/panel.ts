@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.1";
+const PLUGIN_UI_VERSION = "0.4.2";
 
 function newId(): string {
   try {
@@ -166,6 +166,24 @@ export function mountPanel(root: HTMLElement): void {
     }
   }
 
+  /** Bottom-bar chips are UXP-reliable; message-embedded chips often miss clicks. */
+  function renderEgressActionChips(): void {
+    chips.innerHTML = "";
+    chips.append(
+      chip("确认外发", () => {
+        if (!pendingEgress) return;
+        addMessage("user", "确认外发");
+        pendingEgress.resolve(true);
+      }),
+      chip("取消", () => {
+        if (!pendingEgress) return;
+        addMessage("user", "取消");
+        pendingEgress.resolve(false);
+      }),
+    );
+    chips.classList.remove("hidden");
+  }
+
   /**
    * Privacy gate (AGENTS.md / 00_03): image must not leave the host until the
    * user explicitly confirms the destination. Session-scoped per baseUrl.
@@ -185,33 +203,26 @@ export function mountPanel(root: HTMLElement): void {
     }
 
     return new Promise((resolve) => {
+      let settled = false;
       const settle = (ok: boolean) => {
+        if (settled) return;
         if (pendingEgress?.baseUrl !== key) return;
+        settled = true;
         pendingEgress = null;
         if (ok) egressAllowedBaseUrl = key;
         setBusy(busy);
+        renderAgentChrome();
         resolve(ok);
       };
       pendingEgress = { baseUrl: key, resolve: settle };
       setBusy(busy);
+      // Primary affordance: same bottom chip bar as「识别表格」(works in UXP).
+      renderEgressActionChips();
 
       const host = describeEgressTarget(key);
-      const actions = el("div", { className: "chips egress-actions" });
-      const okBtn = el("div", { className: "chip", role: "button" }, ["确认外发"]);
-      const noBtn = el("div", { className: "chip", role: "button" }, ["取消"]);
-      okBtn.addEventListener("click", () => {
-        addMessage("user", "确认外发");
-        settle(true);
-      });
-      noBtn.addEventListener("click", () => {
-        addMessage("user", "取消");
-        settle(false);
-      });
-      actions.append(okBtn, noBtn);
       addMessage(
         "assistant",
-        `选区图/补图将发送到你配置的服务用于识图：\n${host}\n${key}\n确认后才会外发；可取消。`,
-        actions,
+        `选区图/补图将发送到你配置的服务用于识图：\n${host}\n${key}\n请点下方「确认外发」或「取消」（同会话同一地址只需确认一次）。`,
       );
     });
   }
@@ -976,6 +987,13 @@ export function mountPanel(root: HTMLElement): void {
         pendingEgress.resolve(false);
         return;
       }
+      addMessage("user", text);
+      composer.value = "";
+      addMessage(
+        "assistant",
+        "请先点下方「确认外发」或「取消」（也可直接回复确认/取消）。选区图尚未外发。",
+      );
+      return;
     }
 
     if (busy) return;
@@ -1161,7 +1179,8 @@ export function mountPanel(root: HTMLElement): void {
   composer.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter" && !ev.shiftKey) {
       ev.preventDefault();
-      if (busy) return;
+      // Allow confirm/cancel while recognize is blocked on image-egress gate.
+      if (busy && !pendingEgress) return;
       void handleUserText(composer.value);
     }
   });
