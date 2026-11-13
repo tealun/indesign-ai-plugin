@@ -36,7 +36,8 @@ export const TASK_CATALOG: TaskDefinition[] = [
       {
         name: "styleName",
         required: false,
-        description: "文档表样式名",
+        description:
+          "文档表样式名（例：货号信息表 / [货号信息表]）；未知时可先识别再问，或用项目偏好样式",
       },
     ],
     emits: ["lock_selection", "recognize_table", "replace_table"],
@@ -58,7 +59,8 @@ export const TASK_CATALOG: TaskDefinition[] = [
       {
         name: "styleName",
         required: true,
-        description: "必须能对应 runtimeContext.tableStyles",
+        description:
+          "必须能对应 runtimeContext.tableStyles（例：货号信息表 / [货号信息表]）",
       },
     ],
     emits: ["replace_table"],

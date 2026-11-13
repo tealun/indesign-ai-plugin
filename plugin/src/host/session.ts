@@ -41,12 +41,14 @@ export function clearLockedSelection(): void {
 
 export function selectionSummary(items: SelectionItem[]): string {
   if (items.length === 0) return "无选区";
-  return items
-    .map((i) => {
-      if (i.type === "graphic" && i.normalizedFromImageId) {
-        return `graphic#${i.id}(图框←图${i.normalizedFromImageId})`;
-      }
-      return `${i.type}#${i.id}`;
-    })
-    .join(", ");
+  if (items.length === 1) {
+    const i = items[0]!;
+    if (i.type === "graphic" && i.normalizedFromImageId) {
+      return `1 个图框`;
+    }
+    return `1 个${i.type === "textFrame" ? "文本框" : i.type === "group" ? "编组" : "对象"}`;
+  }
+  const groups = items.filter((i) => i.type === "group").length;
+  if (groups === items.length) return `${items.length} 个编组`;
+  return `${items.length} 个对象`;
 }

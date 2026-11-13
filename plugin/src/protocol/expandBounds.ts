@@ -1,8 +1,12 @@
 import type { Bounds } from "../types/protocol.js";
 
+/** Soft floor when selection strip is nearly flat (pt). */
+export const MIN_TABLE_ROW_PT = 16;
+
 /**
- * Keep selection top-left + width (same place on page).
- * Only increase height downward when the original fake-table strip is too short.
+ * In-place footprint: keep selection top-left and **width**.
+ * Only grow height downward when the fake-table strip is too short for the
+ * row count. Table columns must fit inside this width (see host fitTableToFrame).
  */
 export function expandBoundsForTable(
   bounds: Bounds,
@@ -10,11 +14,11 @@ export function expandBoundsForTable(
   _columnCount?: number,
 ): Bounds {
   const rows = Math.max(1, rowCount);
-  const neededH = rows * 14 + 6;
+  const neededH = rows * MIN_TABLE_ROW_PT + 8;
   return {
     x: bounds.x,
     y: bounds.y,
-    w: bounds.w,
+    w: Math.max(bounds.w, 12),
     h: Math.max(bounds.h, neededH),
     unit: "pt",
   };

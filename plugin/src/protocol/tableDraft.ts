@@ -1,8 +1,50 @@
 import type { ProtocolError, TableDraft } from "../types/protocol.js";
+import { normalizeCellText } from "./cellText.js";
 
 export type TableDraftValidation =
   | { ok: true; draft: TableDraft; bodyRowCount: number; columnCount: number }
   | { ok: false; error: ProtocolError };
+
+/**
+ * Vision models often mark every row as header/footer on tiny tables
+ * (e.g. 2 rows → header=2). Clamp so at least one body row remains when
+ * the matrix has enough rows.
+ */
+export function normalizeHeaderFooterCounts(
+  rowCount: number,
+  headerRowCount: number,
+  footerRowCount: number,
+): { headerRowCount: number; footerRowCount: number; repaired: boolean } {
+  let h = Number.isFinite(headerRowCount) ? Math.trunc(headerRowCount) : 1;
+  let f = Number.isFinite(footerRowCount) ? Math.trunc(footerRowCount) : 0;
+  if (h < 1) h = 1;
+  if (f < 0) f = 0;
+
+  if (rowCount < 2) {
+    return { headerRowCount: h, footerRowCount: f, repaired: false };
+  }
+
+  const beforeH = h;
+  const beforeF = f;
+  // Need rows.length - h - f >= 1  ⇒  h + f <= rowCount - 1
+  const maxHF = rowCount - 1;
+  if (h + f > maxHF) {
+    // Prefer keeping one header; drop footer first, then shrink header.
+    f = Math.min(f, Math.max(0, maxHF - 1));
+    h = Math.min(h, maxHF - f);
+    if (h < 1) h = 1;
+    if (h + f > maxHF) {
+      h = 1;
+      f = 0;
+    }
+  }
+
+  return {
+    headerRowCount: h,
+    footerRowCount: f,
+    repaired: h !== beforeH || f !== beforeF,
+  };
+}
 
 export function validateTableDraft(input: unknown): TableDraftValidation {
   if (!input || typeof input !== "object") {
@@ -17,8 +59,6 @@ export function validateTableDraft(input: unknown): TableDraftValidation {
   }
 
   const raw = input as Partial<TableDraft> & { merges?: unknown };
-  const headerRowCount = Number(raw.headerRowCount);
-  const footerRowCount = Number(raw.footerRowCount);
   const rows = raw.rows;
 
   if (!Array.isArray(rows) || rows.length === 0) {
@@ -31,6 +71,26 @@ export function validateTableDraft(input: unknown): TableDraftValidation {
       },
     };
   }
+
+  if (rows.length < 2) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "识别结果至少需要表头+正文共 2 行，请补图后重试",
+        details: { rows: rows.length },
+        retryable: true,
+      },
+    };
+  }
+
+  const normalized = normalizeHeaderFooterCounts(
+    rows.length,
+    Number(raw.headerRowCount),
+    Number(raw.footerRowCount),
+  );
+  const headerRowCount = normalized.headerRowCount;
+  const footerRowCount = normalized.footerRowCount;
 
   if (
     !Number.isInteger(headerRowCount) ||
@@ -97,7 +157,7 @@ export function validateTableDraft(input: unknown): TableDraftValidation {
   const draft: TableDraft = {
     headerRowCount,
     footerRowCount,
-    rows: rows.map((row) => row.map((cell) => String(cell ?? ""))),
+    rows: rows.map((row) => row.map((cell) => normalizeCellText(String(cell ?? "")))),
   };
   if (typeof raw.suggestedTableStyleName === "string") {
     draft.suggestedTableStyleName = raw.suggestedTableStyleName;
@@ -105,6 +165,7 @@ export function validateTableDraft(input: unknown): TableDraftValidation {
 
   // merges ignored (M0-T)
   void raw.merges;
+  void normalized.repaired;
 
   return { ok: true, draft, bodyRowCount, columnCount };
 }

@@ -76,6 +76,10 @@ export type AgentRuntimeContext = {
   /** True when draft exists — replace must NOT re-run vision. */
   readyToReplace: boolean;
   draftPreview: string;
+  /** Host advisory: Latin header with no CJK (possible bilingual drop). */
+  headerLikelyDroppedCjk: boolean;
+  /** Short host hint for Agent reply routing; empty when ok. */
+  draftQualityHint: string;
   tableStyles: string[];
   selectedStyle: string;
   hasPatchImage: boolean;

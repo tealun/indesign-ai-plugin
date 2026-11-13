@@ -20,6 +20,7 @@ import {
   type ApplyNestedGrepStyleResult,
   type NestedGrepStyleInfo,
 } from "./grepStyle.js";
+import { normalizeCellText } from "../protocol/cellText.js";
 
 function getApp(): any {
   const mod = tryRequireIndesign();
@@ -425,13 +426,14 @@ export async function exportSelectionToPngDataUrl(selectionIds: string[]): Promi
   if (targets.length === 0) throw new Error("无法解析可导出的图框/对象");
 
   doc.selection = targets;
-  const target = targets[0];
   const format = ExportFormat?.PNG_FORMAT ?? "PNG format";
 
   await withTimeout(
     Promise.resolve().then(() => {
-      // Export the crop frame so PNG matches on-page visible area (not full uncropped media).
-      target.exportFile(format, file);
+      // Single item: export that crop frame. Multiple ungrouped items: exportFile
+      // only works on one pageItem — temporarily group duplicates so the PNG
+      // covers the full union without mutating locked selection ids.
+      exportPageItemsToPng(doc, targets, format, file);
     }),
     45_000,
     "导出选区 PNG",
@@ -459,6 +461,86 @@ function resolvePage(doc: any, pageIndex: number): any {
     return pages.item(0);
   }
   return pages.item(pageIndex);
+}
+
+/**
+ * Export one or many page items as a single PNG.
+ * Multi-select without a group previously only exported targets[0] (wrong/empty).
+ */
+function exportPageItemsToPng(
+  doc: any,
+  targets: any[],
+  format: unknown,
+  file: unknown,
+): void {
+  if (targets.length === 1) {
+    targets[0].exportFile(format, file);
+    return;
+  }
+
+  // Duplicate → group → export → remove duplicates (keeps original locked ids).
+  const errors: string[] = [];
+
+  try {
+    const dups: any[] = [];
+    for (const t of targets) {
+      dups.push(t.duplicate());
+    }
+    let group: any;
+    try {
+      group = doc.groups.add(dups);
+    } catch (e) {
+      for (const d of dups) {
+        try {
+          d.remove();
+        } catch {
+          /* ignore */
+        }
+      }
+      throw e;
+    }
+    try {
+      group.exportFile(format, file);
+      return;
+    } finally {
+      try {
+        group.remove();
+      } catch {
+        for (const d of dups) {
+          try {
+            d.remove();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+  } catch (e) {
+    errors.push(`duplicate-group: ${String(e)}`);
+  }
+
+  // Last resort: group the live selection, export, ungroup (ids may change —
+  // caller should re-lock if needed; better than only exporting first item).
+  try {
+    doc.selection = targets;
+    const group = doc.groups.add(doc.selection);
+    try {
+      group.exportFile(format, file);
+    } finally {
+      try {
+        group.ungroup();
+      } catch {
+        /* leave grouped rather than lose art */
+      }
+    }
+    return;
+  } catch (e) {
+    errors.push(`live-group: ${String(e)}`);
+  }
+
+  throw new Error(
+    `多对象选区导出失败（未编组伪表常见）。请先编组后再识别，或减少选中对象。详情：${errors.join(" | ")}`,
+  );
 }
 
 export function createIndesignHost(): DocumentHost {
@@ -548,9 +630,13 @@ export function createIndesignHost(): DocumentHost {
             } catch {
               /* length check optional */
             }
-            // Equal columns inside the locked frame width — do not resize the frame here
-            equalizeColumnWidths(frame, table, command.columnCount);
-            pinFrameBounds(frame, ctx.created.frameBounds);
+            // Table fits inside selection footprint (in-place), not the reverse.
+            fitTableToFrame(
+              frame,
+              table,
+              command.columnCount,
+              ctx.created.frameBounds,
+            );
             ctx.created.tableId = String(table.id);
             return { ok: true, createdId: String(table.id) };
           }
@@ -588,16 +674,17 @@ export function createIndesignHost(): DocumentHost {
               } catch {
                 /* optional on some versions */
               }
-              // After style (esp. second pass), keep frame on the intended footprint
+              // After style (esp. second pass): pin frame to selection, fit table in.
               if (ctx.created.frameId) {
                 const frame = resolveTextFrame(doc, ctx.created.frameId);
                 if (frame) {
-                  equalizeColumnWidths(
+                  const next = fitTableToFrame(
                     frame,
                     table,
                     Number(table.columns?.length ?? 0) || 1,
+                    ctx.created.frameBounds,
                   );
-                  pinFrameBounds(frame, ctx.created.frameBounds);
+                  if (next) ctx.created.frameBounds = next;
                 }
               }
             } catch (e) {
@@ -767,12 +854,89 @@ function pinFrameBounds(frame: any, bounds: import("../types/protocol.js").Bound
   }
 }
 
-/** Split locked frame width evenly — never change frame x/y/w/h here. */
-function equalizeColumnWidths(frame: any, table: any, columnCount: number): void {
+/**
+ * In-place: pin frame to selection footprint (fixed width), force table width
+ * to match, equalize columns. Grow height downward only if table still taller.
+ * Avoids huge frames and "empty until double-click handle" clipping.
+ */
+function fitTableToFrame(
+  frame: any,
+  table: any,
+  columnCount: number,
+  anchor: import("../types/protocol.js").Bounds | undefined,
+): import("../types/protocol.js").Bounds | undefined {
+  if (!anchor) return undefined;
+  const footprint: import("../types/protocol.js").Bounds = {
+    x: anchor.x,
+    y: anchor.y,
+    w: Math.max(anchor.w, 12),
+    h: Math.max(anchor.h, 12),
+    unit: "pt",
+  };
+  pinFrameBounds(frame, footprint);
+
   const cols = Math.max(1, columnCount);
   try {
-    const gb = Array.from(frame.geometricBounds as number[]);
-    const width = Number(gb[3]) - Number(gb[1]);
+    if (typeof table.width === "number" || "width" in table) {
+      table.width = footprint.w;
+    }
+  } catch {
+    /* some hosts lock width until columns set */
+  }
+
+  equalizeColumnWidths(frame, table, cols, footprint.w);
+
+  try {
+    if (typeof table.width === "number" || "width" in table) {
+      table.width = footprint.w;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // Recompose so overset/clip clears before measuring height
+  try {
+    const story = frame.parentStory;
+    if (story && typeof story.recompose === "function") story.recompose();
+  } catch {
+    try {
+      if (typeof frame.recompose === "function") frame.recompose();
+    } catch {
+      /* optional */
+    }
+  }
+
+  let tableH = 0;
+  try {
+    tableH = Number(table.height) || 0;
+  } catch {
+    tableH = 0;
+  }
+  if (tableH > footprint.h + 0.5) {
+    footprint.h = tableH;
+    pinFrameBounds(frame, footprint);
+  }
+
+  // Final pin width again — style/recompose must not stretch horizontally
+  pinFrameBounds(frame, footprint);
+  equalizeColumnWidths(frame, table, cols, footprint.w);
+  return footprint;
+}
+
+/** Split width evenly across columns (explicit width preferred). */
+function equalizeColumnWidths(
+  frame: any,
+  table: any,
+  columnCount: number,
+  explicitWidth?: number,
+): void {
+  const cols = Math.max(1, columnCount);
+  try {
+    let width = explicitWidth ?? 0;
+    if (!(width > 0)) {
+      const gb = Array.from(frame.geometricBounds as number[]);
+      width = Number(gb[3]) - Number(gb[1]);
+    }
     if (!(width > 0)) return;
     const colW = width / cols;
     for (let c = 0; c < cols; c++) {
@@ -784,7 +948,7 @@ function equalizeColumnWidths(frame: any, table: any, columnCount: number): void
 }
 
 function writeCellContents(cell: any, text: string): void {
-  const value = text ?? "";
+  const value = normalizeCellText(text ?? "");
   try {
     cell.contents = value;
     return;

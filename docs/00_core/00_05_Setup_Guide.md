@@ -16,12 +16,16 @@
 ## Install & build
 
 ```bash
+git checkout main
+git restore package-lock.json   # 若 pull 被本地 lock 改动挡住
+git pull origin main
 npm install
-npm run check    # typecheck + test + build
+npm run build                   # 终端须打印 package 0.4.4+；面板标题同版本
 ```
 
 产物在 `dist/`：`manifest.json`、`index.html`、`styles.css`、`main.js`。  
-UDT：Add Plugin → 选择 `dist/manifest.json` → Load。
+核对：`dist/manifest.json` 的 `version` 与面板副标题 `v0.x.x` 一致。  
+UDT：Remove 旧插件 → Add Plugin → 选**本次仓库**的 `dist/manifest.json` → Load → 在 InDesign 里打开该面板。
 
 技术栈细节见 [`00_06_Tech_Stack.md`](00_06_Tech_Stack.md)。
 

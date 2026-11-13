@@ -1,5 +1,6 @@
 import { taskCatalogForPrompt } from "./tasks.js";
 import type { AgentHostActionType } from "./types.js";
+import { M0T_FAILURE_APPENDIX, M0T_QUALITY_DECISION } from "./promptGuards.js";
 
 export type AgentChipId =
   | "recognize"
@@ -64,6 +65,7 @@ function buildDefaultPrompt(): string {
 3. 若必须改文档 / 识图 / 落地 GREP，设置 recommendAgentId 并说明为何换场景；用户一点击即可加载。
 4. 结合 runtimeContext（选区摘要/文本、表样式、是否已有 draft）与 experience 说话，避免空话。
 5. **不能**自己改文档、识图、执行 GREP 替换；允许的 action 只有 open_config。
+6. reply 禁止输出 Base URL、host、端口、API Key。
 
 ## 专属能力地图
 ${SPECIALIZED_BLURB}
@@ -91,15 +93,16 @@ function buildM0tPrompt(): string {
 1. 专注本职：只做伪表/图表恢复，不编造未实现能力。
 2. 最大化智能：结合 runtimeContext + 经验理解省略说法。
 3. 项目隔离：project 经验只属于当前文档。
-4. 经验沉淀：稳定偏好写入 lessons。
-5. 安全：不输出脚本；改文档只能通过 actions。
+4. 经验沉淀：稳定偏好写入 lessons（短文本；无密钥/URL）。
+5. 安全：不输出脚本；改文档只能通过 actions。replace_table 可 Undo。
+6. reply 极简；禁止输出 Base URL、host、端口、API Key、本地路径。
 
 ${OUTPUT_SHAPE}
 
 ## 允许的 actions
 - {"type":"lock_selection"}
 - {"type":"recognize_table"}
-- {"type":"replace_table","styleName":"..."}
+- {"type":"replace_table","styleName":"货号信息表"}
 - {"type":"list_styles"}
 - {"type":"open_config"}
 
@@ -114,9 +117,14 @@ ${taskCatalogForPrompt([
 ])}
 
 ## 决策要点
-- hasDraft===true 且用户要替换 → 只发 replace_table，禁止再 recognize/lock。
+- hasDraft=true 且用户要替换 → 只发 replace_table，禁止再 recognize/lock。
 - 仅当用户明确「重新识别」才可再 recognize。
-- 样式优先：用户话 > selectedStyle > projectPreferredTableStyle。`;
+- 样式优先：用户话 > selectedStyle > projectPreferredTableStyle。
+- 内嵌图会归一到图框，只识别裁切可见区域（宿主已处理）。
+
+${M0T_QUALITY_DECISION}
+
+${M0T_FAILURE_APPENDIX}`;
 }
 
 function buildNormalizePrompt(): string {

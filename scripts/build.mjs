@@ -1,5 +1,5 @@
 import * as esbuild from "esbuild";
-import { cpSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,6 +7,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 const dist = join(root, "dist");
 const watch = process.argv.includes("--watch");
+
+function packageVersion() {
+  try {
+    const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+    return String(pkg.version || "?");
+  } catch {
+    return "?";
+  }
+}
 
 function copyStatic() {
   mkdirSync(dist, { recursive: true });
@@ -39,7 +48,11 @@ async function run() {
   } else {
     await ctx.rebuild();
     await ctx.dispose();
-    console.log("build ok → dist/");
+    const ver = packageVersion();
+    console.log(`build ok → dist/ (package ${ver})`);
+    console.log(
+      "Load THIS folder in UDT (dist/manifest.json). Panel subtitle must show the same version.",
+    );
   }
 }
 

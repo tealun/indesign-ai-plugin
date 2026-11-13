@@ -1,6 +1,11 @@
 import type { ChatRequest, OpenAiWireApi, ProviderSettings } from "../types/protocol.js";
 import type { ProviderAdapter, ProviderRawResponse } from "./types.js";
 import { parseCommandsFromText, parseTableDraftFromText } from "./parseJson.js";
+import {
+  recoverTableSystemPrompt,
+  recoverTableTemperature,
+  recoverTableUserPrompt,
+} from "./recoverPrompt.js";
 import { withTimeout } from "../util/timeout.js";
 import {
   isLayoutAnalyzeOp,
@@ -28,19 +33,7 @@ function recoverPrompt(request: ChatRequest): string {
     return parseAgentNote(request.userNote)?.user ?? request.userNote ?? "";
   }
   if (request.op === "recover_table") {
-    return [
-      "Recognize the table in the image.",
-      "Return ONLY JSON:",
-      '{"tableDraft":{"headerRowCount":1,"footerRowCount":0,"suggestedTableStyleName":"","rows":[["col1","col2"],["a","b"]]}}',
-      "rules:",
-      "- rows include header and footer rows",
-      "- headerRowCount>=1, footerRowCount>=0, at least one body row",
-      "- ignore merged cells",
-      "- keep cell text faithful to the image language",
-      request.userNote ? `userNote: ${request.userNote}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    return recoverTableUserPrompt(request.userNote);
   }
   if (isLayoutAnalyzeOp(request.op)) {
     return layoutAnalyzeUserPrompt(request);
@@ -59,10 +52,20 @@ function systemPromptFor(request: ChatRequest): string {
       "You are an InDesign layout agent. Output JSON only."
     );
   }
+  if (request.op === "recover_table") {
+    return recoverTableSystemPrompt();
+  }
   if (isLayoutAnalyzeOp(request.op)) {
     return layoutAnalyzeSystemPrompt();
   }
   return "You extract InDesign table structure. Output JSON only. Never output scripts.";
+}
+
+function temperatureFor(request: ChatRequest, settings: ProviderSettings): number {
+  if (request.op === "recover_table") {
+    return recoverTableTemperature(settings.temperature);
+  }
+  return settings.temperature;
 }
 
 function extractChatCompletionsText(httpBody: string): string {
@@ -139,7 +142,7 @@ function buildChatCompletionsBody(request: ChatRequest, settings: ProviderSettin
   }
   return {
     model: settings.model,
-    temperature: settings.temperature,
+    temperature: temperatureFor(request, settings),
     messages: [
       {
         role: "system",
@@ -165,7 +168,7 @@ function buildResponsesBody(request: ChatRequest, settings: ProviderSettings): u
   }
   return {
     model: settings.model,
-    temperature: settings.temperature,
+    temperature: temperatureFor(request, settings),
     input: [{ role: "user", content }],
   };
 }

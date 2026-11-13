@@ -33,6 +33,7 @@ InDesign AI 插件的权威文档入口。实现与改动前先读对应域的�
 | 99_07 verification (2026-11-13) | [`99_audits/99_07_verification_2026-11-13.md`](99_audits/99_07_verification_2026-11-13.md) |
 | Evolution ledger | [`98_evolution/evolution-ledger.md`](98_evolution/evolution-ledger.md) |
 | Decisions / assumptions | [`88_planning/88_02_Planning_Ledgers.md`](88_planning/88_02_Planning_Ledgers.md) |
+| Agent / tool prompt optimization | [`88_planning/88_03_Agent_Prompt_Optimization.md`](88_planning/88_03_Agent_Prompt_Optimization.md) |
 
 ## Maintenance Rules
 
