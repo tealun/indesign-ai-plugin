@@ -4,8 +4,8 @@
 
 - **Symptom**: 框被加得很宽很长仍看不见表，需双击边框节点；单元格内软换行把格子撑满。
 - **Root cause**: 按列数强制加宽 + `syncFrameToTable` 跟表宽走；OCR 软换行原样写入。
-- **Fix**: 选区宽度原位锁定；`fitTableToFrame` 让表宽/列宽贴合框；高度仅必要时向下增；`normalizeCellText` 去掉软换行。
-- **Guardrail**: 替换以选区 footprint 为准（定宽），表适配框，而不是框去追表。
+- **Fix**: 选区宽度原位锁定；`fitTableToFrame` 让表宽/列宽贴合框；高度仅必要时向下增；`normalizeCellText` 将软换行转为硬回车 `\r`（非空格）。
+- **Guardrail**: 替换以选区 footprint 为准（定宽），表适配框，而不是框去追表；单元格换行用硬回车保留多行语义。
 
 ## 2026-11-13 — bodyRowCount must be >= 1
 
