@@ -9,7 +9,8 @@ Evidence: 静态通读 + `npm run check`（61 pass）+ `npm audit`（0 vulns aft
 
 ## Verdict
 
-- P0: **1**（F17 Fixed）| P1 / P2 Open → **全部 Fixed（0.4.6–0.4.7 执行轮）**
+- P0: **1**（F17 Fixed）| P1 / P2 → **全部 Fixed（0.4.6–0.4.7）**
+- **回头核验**：见 [`99_07_verification_2026-11-13.md`](99_07_verification_2026-11-13.md) — 静态/单测 **Verified Fixed**；实机 ID 仍为验证缺口。
 - 白名单、上下文门闸、上传护栏、去 SheetJS、编组抽字均已落地。
 
 ## Findings（状态总表）

@@ -43,4 +43,23 @@ describe("contextGate", () => {
       ["replace_table"],
     );
   });
+
+  it("drops replace_table re-injected after sanitize when agent forbids it (F17)", () => {
+    // Simulates: filter → sanitize injects replace_table → must filter again
+    const normalizeAllowed = [
+      "lock_selection",
+      "list_styles",
+      "apply_table_style",
+      "open_config",
+    ];
+    const afterSanitize = [
+      { type: "apply_table_style" },
+      { type: "replace_table" },
+    ];
+    const { kept } = filterActionsByAllowlist(afterSanitize, normalizeAllowed);
+    assert.deepEqual(
+      kept.map((a) => a.type),
+      ["apply_table_style"],
+    );
+  });
 });

@@ -2,7 +2,14 @@
 
 ## 配套技能：要调用，不要只“照着精神做”
 
-本项目使用 Tealun Dev PDCA（planner、tasker、bugfixer、auditor、evolver、explainer）。触发条件满足时，通过技能工具调用对应技能（或读取它的 SKILL.md 并按步骤执行）；只按“大意”去做不算调用。每个会话的第一条回复，先说明这六个技能里哪些可用；缺哪个就直说。
+本项目使用 Tealun Dev PDCA（planner、tasker、bugfixer、auditor、evolver、explainer）。技能文件位于 Cursor 技能目录（常见路径 `/home/ubuntu/.cursor/skills/<name>/SKILL.md`）。
+
+### 硬性调用门闩（不可跳过）
+
+1. **每个会话第一条回复**必须点名：上述六个技能哪些可用；缺哪个直说。
+2. **触发条件满足时**，在写业务代码或给出审计结论之前，必须先用 Read 打开对应 `SKILL.md`（及技能要求的 references），再按其 Workflow 逐步执行。
+3. **禁止**仅复述旧审计体例或“按大意执行”来冒充已调用技能；无 Read 证据即未调用。
+4. **审计请求** → `$auditor`；**改文件/修缺陷** → `$tasker`（或症状明确时 `$bugfixer`）；**周期结束/经验落盘** → `$evolver` 写入 `docs/98_evolution/evolution-ledger.md`。
 
 - **planner：任何规划意图，不论大小。** 功能、面板流程、协议、供应商、里程碑、文档体系。在写业务代码之前调用，先把决定写进 `docs/`。
 - **tasker：任何对文件或状态的改动。** 动手前写清完成定义和一个可执行的检查；收尾时给出证据（命令输出、截图），不要只给描述。只读的问答不需要。

@@ -27,8 +27,10 @@ InDesign AI 插件的权威文档入口。实现与改动前先读对应域的�
 | Deep planning audit (M0-T protocol) | [`99_audits/99_04_deep_planning_audit.md`](99_audits/99_04_deep_planning_audit.md) |
 | BYOK connection audit | [`99_audits/99_05_byok_connection_audit.md`](99_audits/99_05_byok_connection_audit.md) |
 | Advisor & skills audit | [`99_audits/99_06_advisor_skills_audit.md`](99_audits/99_06_advisor_skills_audit.md) |
-| Catalog / host deep audit (latest impl) | [`99_audits/99_07_catalog_host_deep_audit.md`](99_audits/99_07_catalog_host_deep_audit.md) |
-| Decisions / assumptions | [`88_planning/88_02_Planning_Ledgers.md`](88_planning/88_02_Planning_Ledgers.md) |
+| Catalog / host deep audit | [`99_audits/99_07_catalog_host_deep_audit.md`](99_audits/99_07_catalog_host_deep_audit.md) |
+| 99_07 verification (2026-11-13) | [`99_audits/99_07_verification_2026-11-13.md`](99_audits/99_07_verification_2026-11-13.md) |
+| Evolution ledger | [`98_evolution/evolution-ledger.md`](98_evolution/evolution-ledger.md) |
+| Decisions / assumptions | [`88_planning/88_02_Planning_Ledgers.md`](88_planning/88_02_Planning_Ledgers.md)
 
 ## Maintenance Rules
 
