@@ -1,5 +1,12 @@
 # Evolution Ledger
 
+## 2026-11-13 — 多对象未编组导出失败 + 无进行中反馈
+
+- **Symptom**: 选中大量未编组 graphic 时选区图错误/空白；点发送或确认后聊天无即时反馈，只能干等结果。
+- **Root cause**: `exportFile` 只导出 `targets[0]`；忙碌态没有聊天气泡级指示。
+- **Fix**: 多对象先 duplicate→group→export→删除副本；`setBusy` 显示跳动三点 thinking；选区摘要改为「N 个对象」。
+- **Guardrail**: 多选导出不得只取第一个 pageItem；任何 busy 且非外发等待都应有 thinking 指示。
+
 ## 2026-11-13 — 真表写完框内空白，双击右侧中点才显现
 
 - **Symptom**: 面板显示完成，文本框看似空；双击右侧中间手柄（Fit frame to content）后内容出现。

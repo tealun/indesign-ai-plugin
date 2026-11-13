@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.5";
+const PLUGIN_UI_VERSION = "0.4.6";
 
 function newId(): string {
   try {
@@ -122,6 +122,31 @@ export function mountPanel(root: HTMLElement): void {
     rows: "2",
     placeholder: getAgent(DEFAULT_AGENT_ID).ui.placeholder,
   }) as HTMLTextAreaElement;
+  let thinkingEl: HTMLElement | null = null;
+
+  function hideThinking(): void {
+    if (!thinkingEl) return;
+    thinkingEl.remove();
+    thinkingEl = null;
+  }
+
+  /** ChatGPT-style pending indicator while the host/model is working. */
+  function showThinking(): void {
+    if (thinkingEl) {
+      chatLog.append(thinkingEl);
+      chatLog.scrollTop = chatLog.scrollHeight;
+      return;
+    }
+    const dots = el("div", { className: "thinking-dots", "aria-label": "处理中" });
+    dots.append(el("span", {}), el("span", {}), el("span", {}));
+    thinkingEl = el("div", { className: "msg msg-assistant msg-thinking" }, [
+      el("div", { className: "msg-role" }, ["顾问"]),
+      dots,
+    ]);
+    chatLog.append(thinkingEl);
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
   function addMessage(role: Role, text: string, extra?: HTMLElement): HTMLElement {
     const bubble = el("div", { className: `msg msg-${role}` }, [
       el("div", { className: "msg-role" }, [
@@ -131,6 +156,7 @@ export function mountPanel(root: HTMLElement): void {
     ]);
     if (extra) bubble.append(extra);
     chatLog.append(bubble);
+    if (thinkingEl) chatLog.append(thinkingEl);
     chatLog.scrollTop = chatLog.scrollHeight;
     return bubble;
   }
@@ -151,6 +177,8 @@ export function mountPanel(root: HTMLElement): void {
     const block = v && !pendingEgress;
     sendBtn.classList.toggle("ctl-disabled", block);
     composer.disabled = block;
+    if (block) showThinking();
+    else hideThinking();
   }
 
   function normalizeBaseUrlKey(baseUrl: string): string {

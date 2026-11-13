@@ -250,13 +250,14 @@ export async function exportSelectionToPngDataUrl(selectionIds: string[]): Promi
   if (targets.length === 0) throw new Error("无法解析可导出的图框/对象");
 
   doc.selection = targets;
-  const target = targets[0];
   const format = ExportFormat?.PNG_FORMAT ?? "PNG format";
 
   await withTimeout(
     Promise.resolve().then(() => {
-      // Export the crop frame so PNG matches on-page visible area (not full uncropped media).
-      target.exportFile(format, file);
+      // Single item: export that crop frame. Multiple ungrouped items: exportFile
+      // only works on one pageItem — temporarily group duplicates so the PNG
+      // covers the full union without mutating locked selection ids.
+      exportPageItemsToPng(doc, targets, format, file);
     }),
     45_000,
     "导出选区 PNG",
@@ -284,6 +285,86 @@ function resolvePage(doc: any, pageIndex: number): any {
     return pages.item(0);
   }
   return pages.item(pageIndex);
+}
+
+/**
+ * Export one or many page items as a single PNG.
+ * Multi-select without a group previously only exported targets[0] (wrong/empty).
+ */
+function exportPageItemsToPng(
+  doc: any,
+  targets: any[],
+  format: unknown,
+  file: unknown,
+): void {
+  if (targets.length === 1) {
+    targets[0].exportFile(format, file);
+    return;
+  }
+
+  // Duplicate → group → export → remove duplicates (keeps original locked ids).
+  const errors: string[] = [];
+
+  try {
+    const dups: any[] = [];
+    for (const t of targets) {
+      dups.push(t.duplicate());
+    }
+    let group: any;
+    try {
+      group = doc.groups.add(dups);
+    } catch (e) {
+      for (const d of dups) {
+        try {
+          d.remove();
+        } catch {
+          /* ignore */
+        }
+      }
+      throw e;
+    }
+    try {
+      group.exportFile(format, file);
+      return;
+    } finally {
+      try {
+        group.remove();
+      } catch {
+        for (const d of dups) {
+          try {
+            d.remove();
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+  } catch (e) {
+    errors.push(`duplicate-group: ${String(e)}`);
+  }
+
+  // Last resort: group the live selection, export, ungroup (ids may change —
+  // caller should re-lock if needed; better than only exporting first item).
+  try {
+    doc.selection = targets;
+    const group = doc.groups.add(doc.selection);
+    try {
+      group.exportFile(format, file);
+    } finally {
+      try {
+        group.ungroup();
+      } catch {
+        /* leave grouped rather than lose art */
+      }
+    }
+    return;
+  } catch (e) {
+    errors.push(`live-group: ${String(e)}`);
+  }
+
+  throw new Error(
+    `多对象选区导出失败（未编组伪表常见）。请先编组后再识别，或减少选中对象。详情：${errors.join(" | ")}`,
+  );
 }
 
 export function createIndesignHost(): DocumentHost {
