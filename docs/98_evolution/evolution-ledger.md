@@ -1,5 +1,12 @@
 # Evolution Ledger
 
+## 2026-11-13 — Thinking 三点不动 +「识别中」重复 + UI 过方
+
+- **Symptom**: 忙碌态三点不跳动；已有「识别中…」仍叠一层三点；气泡方正，远逊官方 AI 助手。
+- **Root cause**: InDesign UXP 忽略 CSS `@keyframes`；`setBusy` 的 thinking 与文案状态并存；圆角仅 4px 且每条带「顾问/你」标签。
+- **Fix**: `setInterval` 驱动三点透明度；去掉「识别中…/写入中…」；对齐 Adobe AI Assistant（圆角气泡、去角色标签、淡边框）。
+- **Guardrail**: UXP 动效不要依赖 `@keyframes`；busy 指示与文字进度二选一；圆角用 12–18px，勿用 `999px` pill（UXP 会坏）。
+
 ## 2026-11-13 — 原位替换：框过大且仍需双击才见表；单元格软换行撑破
 
 - **Symptom**: 框被加得很宽很长仍看不见表，需双击边框节点；单元格内软换行把格子撑满。

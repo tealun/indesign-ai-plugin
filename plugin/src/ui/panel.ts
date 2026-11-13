@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.9";
+const PLUGIN_UI_VERSION = "0.4.10";
 
 function newId(): string {
   try {
@@ -123,35 +123,63 @@ export function mountPanel(root: HTMLElement): void {
     placeholder: getAgent(DEFAULT_AGENT_ID).ui.placeholder,
   }) as HTMLTextAreaElement;
   let thinkingEl: HTMLElement | null = null;
+  let thinkingTimer: ReturnType<typeof setInterval> | null = null;
+  let thinkingPhase = 0;
+
+  function stopThinkingAnim(): void {
+    if (thinkingTimer == null) return;
+    clearInterval(thinkingTimer);
+    thinkingTimer = null;
+  }
 
   function hideThinking(): void {
+    stopThinkingAnim();
     if (!thinkingEl) return;
     thinkingEl.remove();
     thinkingEl = null;
   }
 
-  /** ChatGPT-style pending indicator while the host/model is working. */
+  /**
+   * Typing indicator while host/model is working.
+   * Drive opacity via setInterval — InDesign UXP ignores CSS @keyframes.
+   * Do not pair with text status like「识别中…」(redundant).
+   */
   function showThinking(): void {
     if (thinkingEl) {
       chatLog.append(thinkingEl);
       chatLog.scrollTop = chatLog.scrollHeight;
       return;
     }
-    const dots = el("div", { className: "thinking-dots", "aria-label": "处理中" });
-    dots.append(el("span", {}), el("span", {}), el("span", {}));
-    thinkingEl = el("div", { className: "msg msg-assistant msg-thinking" }, [
-      el("div", { className: "msg-role" }, ["顾问"]),
-      dots,
+    const s1 = el("span", {}) as HTMLElement;
+    const s2 = el("span", {}) as HTMLElement;
+    const s3 = el("span", {}) as HTMLElement;
+    const spans = [s1, s2, s3];
+    for (const s of spans) {
+      s.style.opacity = "0.35";
+      s.style.transform = "translateY(0px)";
+    }
+    const dots = el("div", { className: "thinking-dots", "aria-label": "处理中" }, [
+      s1,
+      s2,
+      s3,
     ]);
+    thinkingEl = el("div", { className: "msg msg-assistant msg-thinking" }, [dots]);
+    thinkingPhase = 0;
+    thinkingTimer = setInterval(() => {
+      thinkingPhase = (thinkingPhase + 1) % 3;
+      for (let i = 0; i < spans.length; i++) {
+        const on = i === thinkingPhase;
+        spans[i]!.style.opacity = on ? "1" : "0.35";
+        spans[i]!.style.transform = on ? "translateY(-2px)" : "translateY(0px)";
+      }
+    }, 280);
     chatLog.append(thinkingEl);
     chatLog.scrollTop = chatLog.scrollHeight;
   }
 
   function addMessage(role: Role, text: string, extra?: HTMLElement): HTMLElement {
+    // Adobe AI Assistant style: no per-bubble "顾问/你" labels — alignment shows role.
     const bubble = el("div", { className: `msg msg-${role}` }, [
-      el("div", { className: "msg-role" }, [
-        role === "user" ? "你" : role === "system" ? "系统" : "顾问",
-      ]),
       el("div", { className: "msg-body" }, [text]),
     ]);
     if (extra) bubble.append(extra);
@@ -672,7 +700,6 @@ export function mountPanel(root: HTMLElement): void {
       return false;
     }
 
-    addMessage("assistant", "识别中…");
     try {
       draft = await directRecoverTable(s, {
         op: "recover_table",
@@ -775,7 +802,6 @@ export function mountPanel(root: HTMLElement): void {
       addMessage("assistant", `无法生成指令：${built.error.message}`);
       return;
     }
-    addMessage("assistant", "写入中…");
     const report = await runCommandBatch({
       requestId: newId(),
       commands: built.commands,
