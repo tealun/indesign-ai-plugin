@@ -25,7 +25,7 @@ Evidence limits: 无 InDesign 实机；无真实中转联调；静态 + `npm run
 ### recover_table 图像外发
 - Goal: 选区/补图发往用户 `baseUrl` 前须明示确认
 - Trace: `doRecognize` → `exportSelectionPng` / 补图 → `directRecoverTable` → `fetch(baseUrl+path)` + Bearer
-- Controls: 发送前聊天提示含目标 `baseUrl`；manifest `network.domains: all`（BYOK 必要）
+- Controls: 发送前聊天确认外发（**不回显** `baseUrl`/host/端口；端点仅「配置」页可见）；manifest `network.domains: all`（BYOK 必要）
 - Findings: F1（Fixed）
 - Health: **Healthy**（修复后：确认外发门闩）
 

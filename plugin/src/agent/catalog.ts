@@ -92,7 +92,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: false,
     ui: {
       showTableTools: false,
-      placeholder: "想做什么？需要伪表恢复时可到「Agent」里加载…",
+      placeholder: "想做什么？",
       chips: [],
     },
     allowedActions: ["open_config"],
@@ -107,7 +107,7 @@ export const AGENT_CATALOG: AgentDefinition[] = [
     specialized: true,
     ui: {
       showTableTools: true,
-      placeholder: "自然说：转成表格 / 用「样式名」替换…",
+      placeholder: "转成表格 / 用样式替换…",
       chips: ["recognize", "replace"],
     },
     allowedActions: [

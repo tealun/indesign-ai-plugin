@@ -12,8 +12,7 @@ export function formatProviderHttpError(
   settings: ProviderSettings,
   pathHint: string,
 ): Error {
-  const base = settings.baseUrl.replace(/\/$/, "");
-  const url = `${base}${pathHint}`;
+  // Do not echo baseUrl/host/port — config page is the only place to inspect endpoints.
   const snippet = truncate(body || "");
   const authHint =
     status === 401 || status === 403
@@ -25,7 +24,7 @@ export function formatProviderHttpError(
       : "";
   const parts = [
     `模型接口返回 HTTP ${status}${authHint}${notFoundHint}`,
-    `请求：POST ${url}`,
+    `请求路径：POST ${pathHint}（完整地址仅在「配置」查看）`,
     `model=${settings.model || "（空）"}`,
   ];
   if (snippet) parts.push(`响应：${snippet}`);
