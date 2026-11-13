@@ -1,5 +1,12 @@
 # Evolution Ledger
 
+## 2026-11-13 — 外发确认回显 URL/端口泄密
+
+- **Symptom**: 确认外发文案与识图进度把完整 Base URL / host 打进对话，截图或以后官方托管会暴露基础设施。
+- **Root cause**: 隐私门闩实现时把「明示发往何处」误做成「回显 raw endpoint」。
+- **Fix**: 对话只说「发往配置中的识图通道」；进度文案去掉 `baseUrl`；规范写入 `00_03` / planning ledger。
+- **Guardrail**: 任何面向用户的消息、日志默认字段禁止输出 baseUrl/host/port；核对端点只走「配置」页。
+
 ## 2026-11-13 — 外发确认 chip 点了没反应
 
 - **Symptom**: 伪表恢复识图时弹出「确认外发/取消」，对话气泡里的选项点击无任何反馈。

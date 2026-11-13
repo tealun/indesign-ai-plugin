@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.2";
+const PLUGIN_UI_VERSION = "0.4.3";
 
 function newId(): string {
   try {
@@ -157,15 +157,6 @@ export function mountPanel(root: HTMLElement): void {
     return baseUrl.trim().replace(/\/$/, "");
   }
 
-  function describeEgressTarget(baseUrl: string): string {
-    try {
-      const u = new URL(baseUrl);
-      return u.host || baseUrl;
-    } catch {
-      return baseUrl;
-    }
-  }
-
   /** Bottom-bar chips are UXP-reliable; message-embedded chips often miss clicks. */
   function renderEgressActionChips(): void {
     chips.innerHTML = "";
@@ -186,7 +177,8 @@ export function mountPanel(root: HTMLElement): void {
 
   /**
    * Privacy gate (AGENTS.md / 00_03): image must not leave the host until the
-   * user explicitly confirms the destination. Session-scoped per baseUrl.
+   * user explicitly confirms. Session-scoped per baseUrl. Never echo host/port/URL
+   * in chat (leak risk for BYOK relays and future hosted endpoints).
    */
   function ensureImageEgressAllowed(baseUrl: string): Promise<boolean> {
     const key = normalizeBaseUrlKey(baseUrl);
@@ -219,10 +211,9 @@ export function mountPanel(root: HTMLElement): void {
       // Primary affordance: same bottom chip bar as「识别表格」(works in UXP).
       renderEgressActionChips();
 
-      const host = describeEgressTarget(key);
       addMessage(
         "assistant",
-        `选区图/补图将发送到你配置的服务用于识图：\n${host}\n${key}\n请点下方「确认外发」或「取消」（同会话同一地址只需确认一次）。`,
+        "选区图/补图将发往你在「配置」里选用的识图通道（对话不展示服务地址）。请点下方「确认外发」或「取消」。同一次会话通常只需确认一次；可到「配置」核对端点。",
       );
     });
   }
@@ -683,7 +674,7 @@ export function mountPanel(root: HTMLElement): void {
 
     addMessage(
       "assistant",
-      `② 正在调用模型识别（${s.model} · ${s.wireApi === "responses" ? "Responses /responses" : "ChatCompletions /chat/completions"} → ${s.baseUrl}，超时 ${Math.round(s.timeoutMs / 1000)}s）…`,
+      `② 正在调用模型识别（${s.model} · ${s.wireApi === "responses" ? "Responses" : "ChatCompletions"}，超时 ${Math.round(s.timeoutMs / 1000)}s）…`,
     );
     draft = await directRecoverTable(s, {
       op: "recover_table",
