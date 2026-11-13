@@ -25,7 +25,7 @@ export type AgentDefinition = {
   name: string;
   tagline: string;
   description: string;
-  /** false = shell / default receptionist */
+  /** false = 默认工艺顾问（非专属改文档场景） */
   specialized: boolean;
   ui: AgentUiProfile;
   /** Allowed action types for host sanitizer */

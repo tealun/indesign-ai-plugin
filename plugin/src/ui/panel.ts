@@ -14,7 +14,7 @@ import type {
 } from "../types/protocol.js";
 import { createStubHost } from "../executor/stubHost.js";
 
-const PLUGIN_UI_VERSION = "0.4.6";
+const PLUGIN_UI_VERSION = "0.4.7";
 
 function newId(): string {
   try {
@@ -38,7 +38,14 @@ import {
   selectionSummary,
 } from "../host/session.js";
 import {
+  filterActionsByAllowlist,
+  shouldHarvestLiveSelection,
+  shouldInjectCompareDocument,
+  shouldReadClipboard,
+} from "../agent/contextGate.js";
+import {
   COMPARE_UPLOAD_ACCEPT,
+  MAX_UPLOAD_BYTES,
   extractDocumentText,
 } from "../compare/extractDocumentText.js";
 import { readClipboardText, writeClipboardText } from "../host/clipboard.js";
@@ -113,11 +120,13 @@ export function mountPanel(root: HTMLElement): void {
     text: string;
   } | null = null;
   let busy = false;
-  /** Session approval: image may be POSTed to this normalized baseUrl. */
+  /** Session approval: payload may be POSTed to this normalized baseUrl. */
   let egressAllowedBaseUrl = "";
   let pendingEgress:
     | { baseUrl: string; resolve: (ok: boolean) => void }
     | null = null;
+  let compareUploadGen = 0;
+  let compareParsing = false;
   /** Per-document chat histories — never share across open files. */
   const chatByProject = new Map<string, AgentChatMessage[]>();
   let activeProjectKey = "no-doc";
@@ -179,10 +188,13 @@ export function mountPanel(root: HTMLElement): void {
   }
 
   /**
-   * Privacy gate (AGENTS.md / 00_03): image must not leave the host until the
-   * user explicitly confirms the destination. Session-scoped per baseUrl.
+   * Privacy gate: payload must not leave the host until the user explicitly
+   * confirms the destination. Session-scoped per baseUrl (image + 对照稿共用).
    */
-  function ensureImageEgressAllowed(baseUrl: string): Promise<boolean> {
+  function ensureEgressAllowed(
+    baseUrl: string,
+    kind: "image" | "document",
+  ): Promise<boolean> {
     const key = normalizeBaseUrlKey(baseUrl);
     if (!key) return Promise.resolve(false);
     if (egressAllowedBaseUrl === key) return Promise.resolve(true);
@@ -220,12 +232,20 @@ export function mountPanel(root: HTMLElement): void {
         settle(false);
       });
       actions.append(okBtn, noBtn);
+      const what =
+        kind === "image"
+          ? "选区图/补图将发送到你配置的服务用于识图"
+          : "对照稿文字（上传/剪贴板）将发送到你配置的模型服务做比对";
       addMessage(
         "assistant",
-        `选区图/补图将发送到你配置的服务用于识图：\n${host}\n${key}\n确认后才会外发；可取消。`,
+        `${what}：\n${host}\n${key}\n确认后才会外发；可取消。`,
         actions,
       );
     });
+  }
+
+  function ensureImageEgressAllowed(baseUrl: string): Promise<boolean> {
+    return ensureEgressAllowed(baseUrl, "image");
   }
 
   async function refreshStylesSilent(): Promise<void> {
@@ -727,22 +747,44 @@ export function mountPanel(root: HTMLElement): void {
     reader.readAsDataURL(file);
   });
 
+  function setCompareParsing(v: boolean): void {
+    compareParsing = v;
+    compareFileInput.disabled = v;
+    compareClearBtn.classList.toggle("disabled", v);
+    if (v) {
+      compareDocStatus.textContent = "正在解析对照稿…";
+    } else {
+      refreshCompareDocStatus();
+    }
+  }
+
   compareFileInput.addEventListener("change", () => {
     const file = compareFileInput.files?.[0];
     if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      addMessage(
+        "assistant",
+        `文件过大（${(file.size / (1024 * 1024)).toFixed(1)}MB）。请压缩到 ${MAX_UPLOAD_BYTES / (1024 * 1024)}MB 以内后再上传。`,
+      );
+      compareFileInput.value = "";
+      return;
+    }
+    const gen = ++compareUploadGen;
+    setCompareParsing(true);
     void (async () => {
       try {
         const buf = await file.arrayBuffer();
+        if (gen !== compareUploadGen) return;
         const result = await extractDocumentText(
           file.name,
           new Uint8Array(buf),
         );
+        if (gen !== compareUploadGen) return;
         if (!result.text.trim()) {
           addMessage(
             "assistant",
             `未能从「${file.name}」抽出文字。${result.warnings.join("；") || "请换 txt/docx/xlsx，或另存为可搜索 PDF。"}`,
           );
-          compareFileInput.value = "";
           return;
         }
         compareDoc = {
@@ -750,26 +792,33 @@ export function mountPanel(root: HTMLElement): void {
           format: result.format,
           text: result.text,
         };
-        refreshCompareDocStatus();
         const warn = result.warnings.length
           ? `\n注意：${result.warnings.join("；")}`
           : "";
         addMessage(
           "system",
-          `已载入对照稿「${result.fileName}」（${result.format} · ${result.text.length} 字）。可点「开始比对」或直接说明要比对的范围。${warn}`,
+          `已载入对照稿「${result.fileName}」（${result.format} · ${result.text.length} 字）。可点「开始比对」或直接说明要比对的范围。首次发送前会确认外发目标。${warn}`,
         );
       } catch (e) {
+        if (gen !== compareUploadGen) return;
         addMessage(
           "assistant",
           `上传对照稿失败：${e instanceof Error ? e.message : String(e)}`,
         );
       } finally {
-        compareFileInput.value = "";
+        if (gen === compareUploadGen) {
+          compareFileInput.value = "";
+          setCompareParsing(false);
+        }
       }
     })();
   });
 
   compareClearBtn.addEventListener("click", () => {
+    if (compareParsing) {
+      compareUploadGen += 1;
+      setCompareParsing(false);
+    }
     compareDoc = null;
     refreshCompareDocStatus();
     addMessage("system", "已清除上传的对照稿。");
@@ -1024,8 +1073,12 @@ export function mountPanel(root: HTMLElement): void {
       : "";
     let selectionText = selectionTextFromSnapshot(locked?.snapshot ?? null);
     let summary = locked ? selectionSummary(locked.snapshot.selection) : "";
-    // Live selection fallback — compare/proof often run without explicit lock
-    if (!selectionText && isInDesignRuntime()) {
+    // Live selection — only agents that need layout text (99_07 F7)
+    if (
+      !selectionText &&
+      shouldHarvestLiveSelection(activeAgentId) &&
+      isInDesignRuntime()
+    ) {
       try {
         const live = await readSelectionSnapshot();
         selectionText = selectionTextFromSnapshot(live);
@@ -1037,24 +1090,22 @@ export function mountPanel(root: HTMLElement): void {
       }
     }
     let clipboardText = "";
-    if (
-      activeAgentId === "m0.copy_compare" ||
-      activeAgentId === DEFAULT_AGENT_ID
-    ) {
+    if (shouldReadClipboard(activeAgentId)) {
       try {
         clipboardText = await readClipboardText();
       } catch {
         clipboardText = "";
       }
     }
+    const injectCompare = shouldInjectCompareDocument(activeAgentId);
     return {
       selectionLocked: Boolean(locked),
       selectionSummary: summary,
       selectionText,
       clipboardText,
-      compareDocumentText: compareDoc?.text ?? "",
-      compareDocumentName: compareDoc?.fileName ?? "",
-      compareDocumentFormat: compareDoc?.format ?? "",
+      compareDocumentText: injectCompare ? compareDoc?.text ?? "" : "",
+      compareDocumentName: injectCompare ? compareDoc?.fileName ?? "" : "",
+      compareDocumentFormat: injectCompare ? compareDoc?.format ?? "" : "",
       hasDraft: Boolean(draft),
       readyToReplace: Boolean(draft),
       draftPreview: preview,
@@ -1099,18 +1150,19 @@ export function mountPanel(root: HTMLElement): void {
   }
 
   function filterActionsForAgent(actions: AgentAction[]): AgentAction[] {
-    const allowed = new Set(getAgent(activeAgentId).allowedActions);
-    const next = actions.filter((a) => allowed.has(a.type));
-    if (next.length !== actions.length) {
+    const { kept, dropped } = filterActionsByAllowlist(
+      actions,
+      getAgent(activeAgentId).allowedActions,
+    );
+    if (dropped.length) {
       addMessage(
         "system",
-        `已忽略当前 Agent 不允许的动作（${actions
-          .filter((a) => !allowed.has(a.type))
+        `已忽略当前 Agent 不允许的动作（${dropped
           .map((a) => a.type)
           .join(", ")}）。`,
       );
     }
-    return next;
+    return kept;
   }
 
   async function executeAgentActions(actions: AgentAction[]): Promise<void> {
@@ -1274,6 +1326,23 @@ export function mountPanel(root: HTMLElement): void {
 
     setBusy(true);
     try {
+      // 99_07 F5: confirm before sending uploaded/clipboard对照稿 to BYOK
+      if (
+        activeAgentId === "m0.copy_compare" &&
+        (compareDoc?.text || shouldReadClipboard(activeAgentId))
+      ) {
+        const needsDocGate =
+          Boolean(compareDoc?.text) ||
+          Boolean((await readClipboardText().catch(() => "")).trim());
+        if (needsDocGate) {
+          const ok = await ensureEgressAllowed(s.baseUrl, "document");
+          if (!ok) {
+            addMessage("assistant", "已取消：对照稿未发送到模型。");
+            return;
+          }
+        }
+      }
+
       await refreshStylesSilent();
       const id = getActiveDocumentIdentity();
       const mem = loadMemory();

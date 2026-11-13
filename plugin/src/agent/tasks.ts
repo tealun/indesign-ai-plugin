@@ -80,8 +80,13 @@ export const TASK_CATALOG: TaskDefinition[] = [
   {
     id: "m0.compare_copy",
     title: "文稿比对",
-    triggers: "用户粘贴 Word/Excel/对照稿，要与版面选区文本比差异。",
-    steps: ["lock_selection（如需要读选区）", "仅在 reply 中报告差异，不写文档"],
+    triggers:
+      "用户上传对照稿（txt/doc/docx/xlsx/pdf 等）或粘贴/剪贴板对照稿，要与版面选区文本比差异。",
+    steps: [
+      "lock_selection（如需要读选区）",
+      "优先用 compareDocumentText，其次粘贴/剪贴板",
+      "仅在 reply 中报告差异，不写文档",
+    ],
     params: [],
     emits: ["lock_selection"],
   },

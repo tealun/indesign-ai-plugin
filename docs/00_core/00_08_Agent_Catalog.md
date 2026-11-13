@@ -41,13 +41,13 @@
 - 选区文本：`plugin/src/host/extractText.ts`（框/表/单元格 → `storyText`）
 - 剪贴板：`plugin/src/host/clipboard.ts`（比对读入；GREP 一键复制）
 
-## Host deepening（0.4.4）
+## Host deepening（0.4.4–0.4.7）
 
 | Agent | 宿主能力 |
 | --- | --- |
 | 贴表规范化 | `apply_table_style`：选区 Table / Cell 上溯 / 框内 nested tables |
-| 文稿比对 | 上传对照稿解析 → `compareDocumentText`；live 选区；`clipboardText` 备选 |
-| 文章校对 | 同上 live `selectionText` |
+| 文稿比对 | 上传对照稿（0.4.5+）→ `compareDocumentText`（仅本 Agent 注入）；剪贴板备选；外发确认 |
+| 文章校对 | live `selectionText`（限校对等场景） |
 | GREP 助手 | `propose_grep` 气泡提供「复制查找式 / 替换式」 |
 
 ## Acceptance（本期）

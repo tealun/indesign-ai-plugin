@@ -30,6 +30,23 @@ describe("extractIndesignItemText", () => {
     assert.equal(extractIndesignItemText(table), "A\tB\n1\t2");
   });
 
+  it("walks group children text frames", () => {
+    const group = {
+      constructor: { name: "Group" },
+      allPageItems: {
+        length: 2,
+        item(i: number) {
+          return i === 0
+            ? { contents: "框一" }
+            : { contents: "框二" };
+        },
+      },
+    };
+    const text = extractIndesignItemText(group);
+    assert.match(text, /框一/);
+    assert.match(text, /框二/);
+  });
+
   it("returns empty for null", () => {
     assert.equal(extractIndesignItemText(null), "");
   });

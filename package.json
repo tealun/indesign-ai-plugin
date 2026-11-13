@@ -1,6 +1,6 @@
 {
   "name": "indesign-ai-plugin",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "private": true,
   "description": "InDesign UXP AI panel — layout assist and vector-table recovery",
   "type": "module",
@@ -16,13 +16,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
-    "@types/xlsx": "^0.0.35",
     "esbuild": "^0.25.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   },
   "dependencies": {
-    "fflate": "^0.8.3",
-    "xlsx": "^0.18.5"
+    "fflate": "^0.8.3"
   }
 }
